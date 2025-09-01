@@ -39,7 +39,7 @@ fun CameraPreview(
     ) { view ->
         try {
             val cameraProvider = cameraProviderFuture.get()
-            Log.d("CameraPreview", "Camera provider obtained successfully")
+            Log.i("CameraPreview", "Camera provider obtained successfully")
         
         val preview = Preview.Builder()
             .setTargetAspectRatio(AspectRatio.RATIO_16_9)
@@ -61,18 +61,18 @@ fun CameraPreview(
         
         val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
         
-            try {
-                cameraProvider.unbindAll()
-                val camera = cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    cameraSelector,
-                    preview,
-                    imageAnalysis
-                )
-                Log.d("CameraPreview", "Camera bound successfully: ${camera.cameraInfo}")
-            } catch (exc: Exception) {
-                Log.e("CameraPreview", "Camera binding failed", exc)
-            }
+        try {
+            cameraProvider.unbindAll()
+            val camera = cameraProvider.bindToLifecycle(
+                lifecycleOwner,
+                cameraSelector,
+                preview,
+                imageAnalysis
+            )
+            Log.i("CameraPreview", "Camera bound successfully: ${camera.cameraInfo}")
+        } catch (exc: Exception) {
+            Log.e("CameraPreview", "Camera binding failed", exc)
+        }
         } catch (exc: Exception) {
             Log.e("CameraPreview", "Failed to get camera provider", exc)
         }
@@ -90,7 +90,7 @@ private fun createPoseDetector(): PoseDetector {
         .setDetectorMode(PoseDetectorOptions.STREAM_MODE)
         .setPreferredHardwareConfigs(PoseDetectorOptions.CPU_GPU)
         .build()
-    Log.d("CameraPreview", "Pose detector created with options: STREAM_MODE, CPU_GPU")
+    Log.i("CameraPreview", "Pose detector created with options: STREAM_MODE, CPU_GPU")
     return PoseDetection.getClient(options)
 }
 
@@ -112,9 +112,12 @@ private class PoseAnalyzer(
                 
                 poseDetector.process(image)
                     .addOnSuccessListener { pose ->
-                        // Always call onPoseDetected to update debug info, even if no pose found
-                        onPoseDetected(imageProxy, pose)
-                        Log.d("PoseAnalyzer", "Pose detection success: ${pose.allPoseLandmarks.size} landmarks")
+                        if (pose.allPoseLandmarks.isNotEmpty()) {
+                            onPoseDetected(imageProxy, pose)
+                            Log.d("PoseAnalyzer", "Pose detection success: ${pose.allPoseLandmarks.size} landmarks")
+                        } else {
+                            Log.d("PoseAnalyzer", "No pose detected")
+                        }
                     }
                     .addOnFailureListener { exception ->
                         Log.e("PoseAnalyzer", "Pose detection failed", exception)

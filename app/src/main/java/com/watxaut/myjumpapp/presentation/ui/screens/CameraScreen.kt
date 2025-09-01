@@ -25,6 +25,7 @@ import com.watxaut.myjumpapp.domain.jump.DebugInfo
 import com.watxaut.myjumpapp.presentation.ui.components.CameraPermissionHandler
 import com.watxaut.myjumpapp.presentation.ui.components.CameraPreview
 import com.watxaut.myjumpapp.presentation.ui.components.CameraSetupGuideDialog
+import com.watxaut.myjumpapp.presentation.ui.components.PoseOverlay
 import com.watxaut.myjumpapp.presentation.viewmodels.JumpSessionViewModel
 import com.watxaut.myjumpapp.presentation.viewmodels.JumpSessionUiState
 
@@ -38,7 +39,6 @@ fun CameraScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     var showSetupGuide by remember { mutableStateOf(false) }
-    var showInitialTip by remember { mutableStateOf(true) }
     
     LaunchedEffect(userId) {
         if (userId != null) {
@@ -105,8 +105,6 @@ fun CameraScreen(
             CameraPermissionHandler {
                 JumpDetectionContent(
                     uiState = uiState,
-                    showInitialTip = showInitialTip,
-                    onDismissTip = { showInitialTip = false },
                     onShowGuide = { showSetupGuide = true },
                     onStopSession = { viewModel.stopSession() },
                     onPoseDetected = { imageProxy, pose ->
@@ -129,73 +127,37 @@ fun CameraScreen(
 @Composable
 private fun JumpDetectionContent(
     uiState: JumpSessionUiState,
-    showInitialTip: Boolean,
-    onDismissTip: () -> Unit,
     onShowGuide: () -> Unit,
     onStopSession: () -> Unit,
     onPoseDetected: (androidx.camera.core.ImageProxy, com.google.mlkit.vision.pose.Pose) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var currentPose by remember { mutableStateOf<com.google.mlkit.vision.pose.Pose?>(null) }
+    
     Box(modifier = modifier.fillMaxSize()) {
         // Camera Preview
         CameraPreview(
-            onPoseDetected = onPoseDetected
+            onPoseDetected = { imageProxy, pose ->
+                currentPose = pose
+                onPoseDetected(imageProxy, pose)
+            }
         )
         
-        // Initial Setup Tip
-        if (showInitialTip && !uiState.isSessionActive) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .align(Alignment.TopCenter),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Setup Tip",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = "Position phone 120-180 cm away at waist height. Tap ? for full guide.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    
-                    Row {
-                        TextButton(onClick = onShowGuide) {
-                            Text("Guide", color = MaterialTheme.colorScheme.primary)
-                        }
-                        
-                        TextButton(onClick = onDismissTip) {
-                            Text("Got it", color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                }
-            }
-        }
+        // Pose Overlay - Draw head, hips, and toes
+        PoseOverlay(
+            pose = currentPose
+        )
         
         // Overlay UI
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Status Bar (with space for tip)
+            // Top Status Bar
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
-                    .padding(top = if (showInitialTip && !uiState.isSessionActive) 80.dp else 0.dp),
+                    .padding(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
                 ),
@@ -421,8 +383,14 @@ private fun CalibrationStatus(debugInfo: DebugInfo) {
         
         // Live debug info during calibration
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            DebugItem(
+                label = "Person Height",
+                value = "${String.format("%.0f", debugInfo.currentHeight)}px",
+                color = MaterialTheme.colorScheme.primary
+            )
+            
             DebugItem(
                 label = "Body",
                 value = if (debugInfo.poseDetected) "✓ Detected" else "✗ Not found",
@@ -469,9 +437,9 @@ private fun DebugInfoDisplay(debugInfo: DebugInfo) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 DebugItem(
-                    label = "Height",
-                    value = "${String.format("%.1f", debugInfo.currentHeight)}px",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    label = "Person Height",
+                    value = "${String.format("%.0f", debugInfo.currentHeight)}px",
+                    color = MaterialTheme.colorScheme.primary
                 )
                 
                 DebugItem(

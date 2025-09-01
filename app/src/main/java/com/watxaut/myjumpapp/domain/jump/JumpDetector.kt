@@ -1,5 +1,6 @@
 package com.watxaut.myjumpapp.domain.jump
 
+import android.util.Log
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,11 +47,11 @@ class JumpDetector @Inject constructor() {
     private var jumpStartTime: Long = 0L
     private var maxHeightReached: Double = 0.0
     private var frameCount = 0
-    private var calibrationFrames = 30 // Frames to establish baseline
+    private var calibrationFrames = 60 // Frames to establish baseline
     private var heightHistory = mutableListOf<Double>()
     private var isCalibrated = false
     
-    private val jumpThreshold = 0.03 // 3cm threshold for detecting a jump
+    private val jumpThreshold = 0.2 // 20cm threshold for detecting a jump
     private val landingThreshold = 0.02 // 2cm threshold for detecting landing
     private val smoothingWindowSize = 5
     
@@ -61,7 +62,11 @@ class JumpDetector @Inject constructor() {
             pose.allPoseLandmarks.map { it.inFrameLikelihood }.average().toFloat()
         } else 0f
         
+        Log.d("JumpDetector", "Processing pose - landmarks: $landmarksCount, confidence: $confidenceScore")
+        
         val currentHeight = calculatePersonHeight(pose)
+        
+        Log.d("JumpDetector", "Height calculation result: $currentHeight, frameCount: $frameCount, isCalibrated: $isCalibrated")
         
         val debugInfo = DebugInfo(
             poseDetected = poseDetected,
@@ -80,6 +85,12 @@ class JumpDetector @Inject constructor() {
         _jumpData.value = _jumpData.value.copy(debugInfo = debugInfo)
         
         if (currentHeight == null) {
+            Log.d("JumpDetector", "Height calculation returned null - missing required landmarks, cannot calibrate")
+            // Reset calibration when body is lost
+            if (frameCount > 0) {
+                Log.d("JumpDetector", "Body lost during calibration - resetting calibration progress")
+                resetCalibration()
+            }
             return
         }
         
@@ -102,11 +113,14 @@ class JumpDetector @Inject constructor() {
     
     private fun calibrateBaseline(height: Double) {
         frameCount++
+        Log.i("JumpDetector", "Calibration frame $frameCount/$calibrationFrames - height: $height")
         
         if (frameCount <= calibrationFrames) {
             baselineHeight = ((baselineHeight * (frameCount - 1)) + height) / frameCount
+            Log.i("JumpDetector", "Updated baseline height: $baselineHeight")
         } else {
             isCalibrated = true
+            Log.i("JumpDetector", "Calibration completed! Final baseline height: $baselineHeight")
             _jumpData.value = _jumpData.value.copy(phase = JumpPhase.STANDING)
         }
     }
@@ -115,10 +129,13 @@ class JumpDetector @Inject constructor() {
         val heightDifference = currentHeight - baselineHeight
         val currentData = _jumpData.value
         
+        Log.i("JumpDetector", "Detecting jump phase - current: ${currentData.phase}, height: $currentHeight, baseline: $baselineHeight, difference: $heightDifference")
+        
         when (currentData.phase) {
             JumpPhase.STANDING -> {
                 // Detect crouch (preparing to jump)
                 if (heightDifference < -jumpThreshold) {
+                    Log.i("JumpDetector", "STANDING -> PREPARING: Person crouched (difference: $heightDifference < -$jumpThreshold)")
                     _jumpData.value = currentData.copy(phase = JumpPhase.PREPARING)
                 }
             }
@@ -128,6 +145,7 @@ class JumpDetector @Inject constructor() {
                 if (heightDifference > jumpThreshold) {
                     jumpStartTime = System.currentTimeMillis()
                     maxHeightReached = currentHeight
+                    Log.i("JumpDetector", "PREPARING -> AIRBORNE: Jump detected! (difference: $heightDifference > $jumpThreshold)")
                     _jumpData.value = currentData.copy(
                         phase = JumpPhase.AIRBORNE,
                         isJumping = true
@@ -135,6 +153,7 @@ class JumpDetector @Inject constructor() {
                 }
                 // Return to standing if no jump occurs
                 else if (abs(heightDifference) < landingThreshold) {
+                    Log.i("JumpDetector", "PREPARING -> STANDING: Returned to standing without jumping (difference: ${abs(heightDifference)} < $landingThreshold)")
                     _jumpData.value = currentData.copy(phase = JumpPhase.STANDING)
                 }
             }
@@ -142,6 +161,7 @@ class JumpDetector @Inject constructor() {
             JumpPhase.AIRBORNE -> {
                 // Track maximum height
                 if (currentHeight > maxHeightReached) {
+                    Log.i("JumpDetector", "AIRBORNE: New max height reached: $currentHeight (was $maxHeightReached)")
                     maxHeightReached = currentHeight
                 }
                 
@@ -150,6 +170,7 @@ class JumpDetector @Inject constructor() {
                     val airTime = System.currentTimeMillis() - jumpStartTime
                     val jumpHeight = (maxHeightReached - baselineHeight) * 100 // Convert to cm
                     
+                    Log.i("JumpDetector", "AIRBORNE -> LANDING: Jump completed! Height: ${String.format("%.1f", jumpHeight)}cm, Air time: ${airTime}ms")
                     _jumpData.value = currentData.copy(
                         phase = JumpPhase.LANDING,
                         jumpHeight = jumpHeight,
@@ -162,6 +183,7 @@ class JumpDetector @Inject constructor() {
             JumpPhase.LANDING -> {
                 // Return to standing after brief landing phase
                 if (abs(currentHeight - baselineHeight) < landingThreshold) {
+                    Log.i("JumpDetector", "LANDING -> STANDING: Ready for next jump (difference: ${abs(currentHeight - baselineHeight)} < $landingThreshold)")
                     _jumpData.value = currentData.copy(
                         phase = JumpPhase.STANDING,
                         jumpHeight = 0.0,
@@ -173,12 +195,20 @@ class JumpDetector @Inject constructor() {
     }
     
     private fun calculatePersonHeight(pose: Pose): Double? {
+        // Check for full body visibility with high confidence before allowing calibration
+        if (!isFullBodyVisible(pose)) {
+            return null
+        }
+        
         val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
         val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
         val leftAnkle = pose.getPoseLandmark(PoseLandmark.LEFT_ANKLE)
         val rightAnkle = pose.getPoseLandmark(PoseLandmark.RIGHT_ANKLE)
         
+        Log.i("JumpDetector", "Required landmarks - leftHip: ${leftHip != null}, rightHip: ${rightHip != null}, leftAnkle: ${leftAnkle != null}, rightAnkle: ${rightAnkle != null}")
+        
         if (leftHip == null || rightHip == null || leftAnkle == null || rightAnkle == null) {
+            Log.w("JumpDetector", "Missing required landmarks for height calculation")
             return null
         }
         
@@ -186,9 +216,85 @@ class JumpDetector @Inject constructor() {
         val hipCenterY = (leftHip.position.y + rightHip.position.y) / 2
         val ankleCenterY = (leftAnkle.position.y + rightAnkle.position.y) / 2
         
+        val height = (ankleCenterY - hipCenterY).toDouble()
+        Log.i("JumpDetector", "Calculated height: $height (hipY: $hipCenterY, ankleY: $ankleCenterY)")
+        
         // Return the distance between hip center and ankle center
         // Note: In camera coordinates, Y increases downward, so we use ankle - hip
-        return (ankleCenterY - hipCenterY).toDouble()
+        return height
+    }
+    
+    private fun isFullBodyVisible(pose: Pose): Boolean {
+        val confidenceThreshold = 0.96f
+
+        // Print all landmarks and their confidence
+        val landmarkNames = mapOf(
+            PoseLandmark.NOSE to "NOSE",
+            PoseLandmark.LEFT_EYE_INNER to "LEFT_EYE_INNER",
+            PoseLandmark.LEFT_EYE to "LEFT_EYE",
+            PoseLandmark.LEFT_EYE_OUTER to "LEFT_EYE_OUTER",
+            PoseLandmark.RIGHT_EYE_INNER to "RIGHT_EYE_INNER",
+            PoseLandmark.RIGHT_EYE to "RIGHT_EYE",
+            PoseLandmark.RIGHT_EYE_OUTER to "RIGHT_EYE_OUTER",
+            PoseLandmark.LEFT_EAR to "LEFT_EAR",
+            PoseLandmark.RIGHT_EAR to "RIGHT_EAR",
+            PoseLandmark.LEFT_MOUTH to "LEFT_MOUTH",
+            PoseLandmark.RIGHT_MOUTH to "RIGHT_MOUTH",
+            PoseLandmark.LEFT_SHOULDER to "LEFT_SHOULDER",
+            PoseLandmark.RIGHT_SHOULDER to "RIGHT_SHOULDER",
+            PoseLandmark.LEFT_ELBOW to "LEFT_ELBOW",
+            PoseLandmark.RIGHT_ELBOW to "RIGHT_ELBOW",
+            PoseLandmark.LEFT_WRIST to "LEFT_WRIST",
+            PoseLandmark.RIGHT_WRIST to "RIGHT_WRIST",
+            PoseLandmark.LEFT_PINKY to "LEFT_PINKY",
+            PoseLandmark.RIGHT_PINKY to "RIGHT_PINKY",
+            PoseLandmark.LEFT_INDEX to "LEFT_INDEX",
+            PoseLandmark.RIGHT_INDEX to "RIGHT_INDEX",
+            PoseLandmark.LEFT_THUMB to "LEFT_THUMB",
+            PoseLandmark.RIGHT_THUMB to "RIGHT_THUMB",
+            PoseLandmark.LEFT_HIP to "LEFT_HIP",
+            PoseLandmark.RIGHT_HIP to "RIGHT_HIP",
+            PoseLandmark.LEFT_KNEE to "LEFT_KNEE",
+            PoseLandmark.RIGHT_KNEE to "RIGHT_KNEE",
+            PoseLandmark.LEFT_ANKLE to "LEFT_ANKLE",
+            PoseLandmark.RIGHT_ANKLE to "RIGHT_ANKLE",
+            PoseLandmark.LEFT_HEEL to "LEFT_HEEL",
+            PoseLandmark.RIGHT_HEEL to "RIGHT_HEEL",
+            PoseLandmark.LEFT_FOOT_INDEX to "LEFT_FOOT_INDEX",
+            PoseLandmark.RIGHT_FOOT_INDEX to "RIGHT_FOOT_INDEX"
+        )
+        
+        landmarkNames.forEach { (landmarkType, name) ->
+            val landmark = pose.getPoseLandmark(landmarkType)
+            val confidence = landmark?.inFrameLikelihood ?: 0f
+            Log.d("JumpDetector", "$name: ${String.format("%.3f", confidence)} ${if (confidence > confidenceThreshold) "✓" else "✗"}")
+        }
+        
+        // Check if ALL landmarks are visible with confidence > 0.95
+        val allLandmarksVisible = landmarkNames.all { (landmarkType, _) ->
+            val landmark = pose.getPoseLandmark(landmarkType)
+            val confidence = landmark?.inFrameLikelihood ?: 0f
+            confidence > confidenceThreshold
+        }
+        
+        val visibleLandmarksCount = landmarkNames.count { (landmarkType, _) ->
+            val landmark = pose.getPoseLandmark(landmarkType)
+            val confidence = landmark?.inFrameLikelihood ?: 0f
+            confidence > confidenceThreshold
+        }
+        
+        Log.d("JumpDetector", "=== FULL BODY CHECK (confidence > 0.95) ===")
+        Log.d("JumpDetector", "Visible landmarks: $visibleLandmarksCount/${landmarkNames.size}")
+        Log.d("JumpDetector", "All landmarks visible: $allLandmarksVisible")
+        
+        if (!allLandmarksVisible) {
+            Log.d("JumpDetector", "Not all landmarks visible with sufficient confidence (>0.95) - cannot start calibration")
+        }
+        else {
+            Log.i("JumpDetector", "All landmarks visible with sufficient confidence (>0.95) - ready for calibration!")
+        }
+        
+        return allLandmarksVisible
     }
     
     fun resetCalibration() {

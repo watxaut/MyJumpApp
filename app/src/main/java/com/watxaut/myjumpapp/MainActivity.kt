@@ -1,6 +1,7 @@
 package com.watxaut.myjumpapp
 
 import android.os.Bundle
+import android.util.Log // <--- Add this import
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,10 +19,11 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+        Log.i("MainActivity", "onCreate: MainActivity is starting!") // <--- Add this log
+
         // Keep screen on for the entire app session (camera functionality)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        
+
         enableEdgeToEdge()
         setContent {
             MyJumpAppTheme {

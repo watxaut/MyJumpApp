@@ -20,12 +20,12 @@ class WakeLockManager @Inject constructor() {
             if (context is Activity) {
                 context.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 isWindowFlagSet = true
-                Log.d("WakeLockManager", "Window flag FLAG_KEEP_SCREEN_ON set")
+                Log.i("WakeLockManager", "Window flag FLAG_KEEP_SCREEN_ON set")
             }
             
             // Method 2: PowerManager WakeLock as backup
             if (wakeLock?.isHeld == true) {
-                Log.d("WakeLockManager", "Wake lock already acquired")
+                Log.i("WakeLockManager", "Wake lock already acquired")
                 return // Already acquired
             }
             
@@ -37,7 +37,7 @@ class WakeLockManager @Inject constructor() {
             
             // Acquire with a timeout of 10 minutes as a safety measure
             wakeLock?.acquire(10 * 60 * 1000L /* 10 minutes */)
-            Log.d("WakeLockManager", "Wake lock acquired successfully, isHeld: ${wakeLock?.isHeld}")
+            Log.i("WakeLockManager", "Wake lock acquired successfully, isHeld: ${wakeLock?.isHeld}")
         } catch (e: Exception) {
             Log.e("WakeLockManager", "Failed to acquire wake lock", e)
         }
@@ -53,14 +53,14 @@ class WakeLockManager @Inject constructor() {
             if (isWindowFlagSet && context is Activity) {
                 context.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 isWindowFlagSet = false
-                Log.d("WakeLockManager", "Window flag FLAG_KEEP_SCREEN_ON cleared")
+                Log.i("WakeLockManager", "Window flag FLAG_KEEP_SCREEN_ON cleared")
             }
             
             // Method 2: Release PowerManager WakeLock
             wakeLock?.let { lock ->
                 if (lock.isHeld) {
                     lock.release()
-                    Log.d("WakeLockManager", "Wake lock released")
+                    Log.i("WakeLockManager", "Wake lock released")
                 }
             }
             wakeLock = null

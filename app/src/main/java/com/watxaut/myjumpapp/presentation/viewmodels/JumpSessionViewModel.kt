@@ -1,6 +1,7 @@
 package com.watxaut.myjumpapp.presentation.viewmodels
 
 import android.content.Context
+import android.util.Log
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -61,23 +62,29 @@ class JumpSessionViewModel @Inject constructor(
                 val wasCalibrating = _uiState.value.isCalibrating
                 val isNowCalibrating = jumpData.debugInfo.calibrationProgress < jumpData.debugInfo.calibrationFramesNeeded
                 
+                Log.d("JumpSessionViewModel", "Jump data update: phase=${jumpData.phase}, isJumping=${jumpData.isJumping}, height=${jumpData.jumpHeight}, wasCalibrating=$wasCalibrating, isNowCalibrating=$isNowCalibrating, calibrationProgress=${jumpData.debugInfo.calibrationProgress}/${jumpData.debugInfo.calibrationFramesNeeded}")
+                
                 _uiState.update { currentState ->
-                    currentState.copy(
+                    val newState = currentState.copy(
                         jumpPhase = jumpData.phase,
                         isJumping = jumpData.isJumping,
                         currentJumpHeight = jumpData.jumpHeight,
                         isCalibrating = isNowCalibrating,
                         debugInfo = jumpData.debugInfo
                     )
+                    Log.i("JumpSessionViewModel", "State updated: isCalibrating=${newState.isCalibrating}, jumpPhase=${newState.jumpPhase}, isSessionActive=${newState.isSessionActive}")
+                    newState
                 }
                 
                 // Auto-start session when calibration completes
                 if (wasCalibrating && !isNowCalibrating && _uiState.value.userId != null && !_uiState.value.isSessionActive) {
+                    Log.i("JumpSessionViewModel", "Calibration completed, auto-starting session for user: ${_uiState.value.userId}")
                     startSession(_uiState.value.userId!!)
                 }
                 
                 // Record completed jump
                 if (jumpData.phase == JumpPhase.LANDING && jumpData.jumpHeight > 0) {
+                    Log.i("JumpSessionViewModel", "Recording jump: height=${jumpData.jumpHeight}cm, airTime=${jumpData.airTime}ms")
                     recordJump(jumpData.jumpHeight, jumpData.airTime)
                 }
             }
@@ -85,13 +92,16 @@ class JumpSessionViewModel @Inject constructor(
     }
     
     fun startSession(userId: String) {
+        Log.i("JumpSessionViewModel", "Starting session for user: $userId")
         viewModelScope.launch {
             try {
                 val user = userRepository.getUserById(userId)
                 if (user == null) {
+                    Log.e("JumpSessionViewModel", "User not found: $userId")
                     _uiState.update { it.copy(error = "User not found") }
                     return@launch
                 }
+                Log.i("JumpSessionViewModel", "User found: ${user.userName}")
                 
                 // Create new session
                 val session = JumpSession(
@@ -100,6 +110,7 @@ class JumpSessionViewModel @Inject constructor(
                     startTime = System.currentTimeMillis(),
                     isCompleted = false
                 )
+                Log.i("JumpSessionViewModel", "Created session: ${session.sessionId}")
                 
                 jumpSessionRepository.insertSession(session)
                 currentSession = session
@@ -107,13 +118,15 @@ class JumpSessionViewModel @Inject constructor(
                 
                 // Acquire wake lock to keep screen on during session
                 wakeLockManager.acquireWakeLock(context)
+                Log.i("JumpSessionViewModel", "Wake lock acquired")
                 
                 // Reset detection and UI state
                 jumpDetector.resetCalibration()
                 jumpHeights.clear()
+                Log.i("JumpSessionViewModel", "Jump detector reset and calibration started")
                 
                 _uiState.update {
-                    it.copy(
+                    val newState = it.copy(
                         isSessionActive = true,
                         userId = userId,
                         userName = user.userName,
@@ -126,9 +139,12 @@ class JumpSessionViewModel @Inject constructor(
                         isCalibrating = true,
                         error = null
                     )
+                    Log.i("JumpSessionViewModel", "Session started - isSessionActive=${newState.isSessionActive}, isCalibrating=${newState.isCalibrating}")
+                    newState
                 }
                 
             } catch (exception: Exception) {
+                Log.e("JumpSessionViewModel", "Failed to start session", exception)
                 _uiState.update {
                     it.copy(error = exception.message ?: "Failed to start session")
                 }
@@ -189,13 +205,21 @@ class JumpSessionViewModel @Inject constructor(
     }
     
     fun processPoseDetection(imageProxy: ImageProxy, pose: Pose) {
-        if (_uiState.value.isSessionActive) {
+        val currentState = _uiState.value
+        Log.d("JumpSessionViewModel", "Processing pose - sessionActive=${currentState.isSessionActive}, isCalibrating=${currentState.isCalibrating}, landmarks=${pose.allPoseLandmarks.size}")
+        
+        // Always process poses when calibrating OR when session is active
+        if (currentState.isCalibrating || currentState.isSessionActive) {
             jumpDetector.processPose(pose)
             
-            // Update session duration
-            val currentTime = System.currentTimeMillis()
-            val duration = currentTime - sessionStartTime
-            _uiState.update { it.copy(sessionDuration = duration) }
+            // Update session duration only when session is active
+            if (currentState.isSessionActive) {
+                val currentTime = System.currentTimeMillis()
+                val duration = currentTime - sessionStartTime
+                _uiState.update { it.copy(sessionDuration = duration) }
+            }
+        } else {
+            Log.d("JumpSessionViewModel", "Skipping pose processing - session not active and not calibrating")
         }
     }
     
