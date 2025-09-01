@@ -86,9 +86,9 @@ class JumpDetector @Inject constructor() {
         
         if (currentHeight == null) {
             Log.d("JumpDetector", "Height calculation returned null - missing required landmarks, cannot calibrate")
-            // Reset calibration when body is lost
-            if (frameCount > 0) {
-                Log.d("JumpDetector", "Body lost during calibration - resetting calibration progress")
+            // Only reset if person is completely gone (no landmarks detected at all)
+            if (frameCount > 0 && pose.allPoseLandmarks.isEmpty()) {
+                Log.d("JumpDetector", "No person detected - resetting calibration progress")
                 resetCalibration()
             }
             return

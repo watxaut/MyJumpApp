@@ -120,10 +120,9 @@ class JumpSessionViewModel @Inject constructor(
                 wakeLockManager.acquireWakeLock(context)
                 Log.i("JumpSessionViewModel", "Wake lock acquired")
                 
-                // Reset detection and UI state
-                jumpDetector.resetCalibration()
+                // Clear jump history (calibration already completed)
                 jumpHeights.clear()
-                Log.i("JumpSessionViewModel", "Jump detector reset and calibration started")
+                Log.i("JumpSessionViewModel", "Session started with completed calibration")
                 
                 _uiState.update {
                     val newState = it.copy(
