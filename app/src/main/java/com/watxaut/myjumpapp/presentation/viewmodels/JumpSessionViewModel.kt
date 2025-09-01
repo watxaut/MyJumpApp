@@ -54,6 +54,7 @@ class JumpSessionViewModel @Inject constructor(
     private val jumpHeights = mutableListOf<Double>()
     private var sessionStartTime: Long = 0L
     private var currentSession: JumpSession? = null
+    private var hasRecordedCurrentJump: Boolean = false
     
     init {
         // Observe jump detection
@@ -82,10 +83,16 @@ class JumpSessionViewModel @Inject constructor(
                     startSession(_uiState.value.userId!!)
                 }
                 
-                // Record completed jump
-                if (jumpData.phase == JumpPhase.LANDING && jumpData.jumpHeight > 0) {
+                // Record completed jump (only once per jump)
+                if (jumpData.phase == JumpPhase.LANDING && jumpData.jumpHeight > 0 && !hasRecordedCurrentJump) {
                     Log.i("JumpSessionViewModel", "Recording jump: height=${jumpData.jumpHeight}cm, airTime=${jumpData.airTime}ms")
                     recordJump(jumpData.jumpHeight, jumpData.airTime)
+                    hasRecordedCurrentJump = true
+                }
+                
+                // Reset the flag when returning to standing (ready for next jump)
+                if (jumpData.phase == JumpPhase.STANDING) {
+                    hasRecordedCurrentJump = false
                 }
             }
         }
@@ -184,14 +191,17 @@ class JumpSessionViewModel @Inject constructor(
                 // Release wake lock
                 wakeLockManager.releaseWakeLock(context)
                 
-                // Reset state
+                // Reset state and trigger new calibration
                 currentSession = null
                 jumpHeights.clear()
+                hasRecordedCurrentJump = false
+                jumpDetector.resetCalibration()
                 
                 _uiState.update {
                     JumpSessionUiState(
                         userId = currentState.userId,
-                        userName = currentState.userName
+                        userName = currentState.userName,
+                        isCalibrating = true
                     )
                 }
                 
@@ -281,9 +291,27 @@ class JumpSessionViewModel @Inject constructor(
         }
     }
     
+    fun resetToInitialState() {
+        // Stop any active session
+        if (_uiState.value.isSessionActive) {
+            viewModelScope.launch { stopSession() }
+        }
+        
+        // Reset everything to initial state
+        currentSession = null
+        jumpHeights.clear()
+        hasRecordedCurrentJump = false
+        jumpDetector.resetCalibration()
+        
+        // Release wake lock
+        wakeLockManager.releaseWakeLock(context)
+        
+        // Reset UI state
+        _uiState.value = JumpSessionUiState()
+    }
+    
     override fun onCleared() {
         super.onCleared()
-        // Always release wake lock when ViewModel is destroyed
-        wakeLockManager.releaseWakeLock(context)
+        resetToInitialState()
     }
 }

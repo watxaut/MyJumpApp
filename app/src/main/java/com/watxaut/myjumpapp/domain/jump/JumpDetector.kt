@@ -51,9 +51,10 @@ class JumpDetector @Inject constructor() {
     private var heightHistory = mutableListOf<Double>()
     private var isCalibrated = false
     
-    private val jumpThreshold = 0.2 // 20cm threshold for detecting a jump
-    private val landingThreshold = 0.02 // 2cm threshold for detecting landing
-    private val smoothingWindowSize = 5
+    private val jumpThreshold = 0.3 // 30cm threshold for detecting a jump  
+    private val crouchThreshold = 0.15 // 15cm threshold for detecting crouch
+    private val landingThreshold = 0.05 // 5cm threshold for detecting landing
+    private val smoothingWindowSize = 8
     
     fun processPose(pose: Pose) {
         val poseDetected = pose.allPoseLandmarks.isNotEmpty()
@@ -133,9 +134,9 @@ class JumpDetector @Inject constructor() {
         
         when (currentData.phase) {
             JumpPhase.STANDING -> {
-                // Detect crouch (preparing to jump)
-                if (heightDifference < -jumpThreshold) {
-                    Log.i("JumpDetector", "STANDING -> PREPARING: Person crouched (difference: $heightDifference < -$jumpThreshold)")
+                // Detect crouch (preparing to jump) - use separate crouch threshold
+                if (heightDifference < -crouchThreshold) {
+                    Log.i("JumpDetector", "STANDING -> PREPARING: Person crouched (difference: $heightDifference < -$crouchThreshold)")
                     _jumpData.value = currentData.copy(phase = JumpPhase.PREPARING)
                 }
             }
@@ -168,7 +169,7 @@ class JumpDetector @Inject constructor() {
                 // Detect landing (return to near baseline)
                 if (abs(currentHeight - baselineHeight) < landingThreshold) {
                     val airTime = System.currentTimeMillis() - jumpStartTime
-                    val jumpHeight = (maxHeightReached - baselineHeight) * 100 // Convert to cm
+                    val jumpHeight = (maxHeightReached - baselineHeight) * 0.3 // Convert pixels to cm (approximate)
                     
                     Log.i("JumpDetector", "AIRBORNE -> LANDING: Jump completed! Height: ${String.format("%.1f", jumpHeight)}cm, Air time: ${airTime}ms")
                     _jumpData.value = currentData.copy(
@@ -181,9 +182,11 @@ class JumpDetector @Inject constructor() {
             }
             
             JumpPhase.LANDING -> {
-                // Return to standing after brief landing phase
+                // Return to standing after brief landing phase and update baseline
                 if (abs(currentHeight - baselineHeight) < landingThreshold) {
-                    Log.i("JumpDetector", "LANDING -> STANDING: Ready for next jump (difference: ${abs(currentHeight - baselineHeight)} < $landingThreshold)")
+                    // Update baseline to current position (person might have moved)
+                    baselineHeight = currentHeight
+                    Log.i("JumpDetector", "LANDING -> STANDING: Ready for next jump, baseline updated to $baselineHeight")
                     _jumpData.value = currentData.copy(
                         phase = JumpPhase.STANDING,
                         jumpHeight = 0.0,
