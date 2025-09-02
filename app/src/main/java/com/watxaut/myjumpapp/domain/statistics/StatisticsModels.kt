@@ -1,5 +1,6 @@
 package com.watxaut.myjumpapp.domain.statistics
 
+import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -9,7 +10,8 @@ data class UserStatistics(
     val overallStats: OverallStats,
     val recentStats: RecentStats,
     val progressStats: ProgressStats,
-    val achievementStats: AchievementStats
+    val achievementStats: AchievementStats,
+    val surfaceStats: SurfaceFilteredStats
 )
 
 data class OverallStats(
@@ -191,3 +193,27 @@ enum class StatisticType {
     FLIGHT_TIME,
     SESSIONS
 }
+
+// Surface-specific statistics
+data class SurfaceFilteredStats(
+    val hardFloorStats: SurfaceSpecificStats,
+    val sandStats: SurfaceSpecificStats,
+    val comparison: SurfaceComparison
+)
+
+data class SurfaceSpecificStats(
+    val surfaceType: SurfaceType,
+    val totalSessions: Int,
+    val bestHeight: Double,
+    val averageHeight: Double,
+    val last7DaysSessions: Int,
+    val last30DaysSessions: Int,
+    val firstSessionDate: LocalDateTime?,
+    val lastSessionDate: LocalDateTime?
+)
+
+data class SurfaceComparison(
+    val heightDifferencePercent: Double, // % difference between hard floor and sand
+    val preferredSurface: SurfaceType?, // Surface with more sessions
+    val sessionRatio: Double // Ratio of hard floor to sand sessions
+)

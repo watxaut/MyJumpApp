@@ -2,6 +2,7 @@ package com.watxaut.myjumpapp.data.database.dao
 
 import androidx.room.*
 import com.watxaut.myjumpapp.data.database.entities.User
+import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -30,6 +31,24 @@ interface UserDao {
     
     @Query("UPDATE users SET total_jumps = :totalJumps, best_jump_height = :bestHeight WHERE user_id = :userId")
     suspend fun updateUserStats(userId: String, totalJumps: Int, bestHeight: Double)
+    
+    @Query("""UPDATE users SET 
+              best_jump_height_hard_floor = :bestHeightHardFloor,
+              best_jump_height_sand = :bestHeightSand,
+              total_sessions_hard_floor = :totalSessionsHardFloor,
+              total_sessions_sand = :totalSessionsSand,
+              total_jumps_hard_floor = :totalJumpsHardFloor,
+              total_jumps_sand = :totalJumpsSand
+              WHERE user_id = :userId""")
+    suspend fun updateSurfaceSpecificStats(
+        userId: String,
+        bestHeightHardFloor: Double,
+        bestHeightSand: Double,
+        totalSessionsHardFloor: Int,
+        totalSessionsSand: Int,
+        totalJumpsHardFloor: Int,
+        totalJumpsSand: Int
+    )
     
     @Query("SELECT COUNT(*) FROM users WHERE is_active = 1")
     suspend fun getActiveUserCount(): Int

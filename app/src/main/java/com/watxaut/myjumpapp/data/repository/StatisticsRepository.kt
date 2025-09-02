@@ -4,6 +4,7 @@ import com.watxaut.myjumpapp.data.database.dao.JumpDao
 import com.watxaut.myjumpapp.data.database.dao.JumpSessionDao
 import com.watxaut.myjumpapp.data.database.dao.UserDao
 import com.watxaut.myjumpapp.domain.statistics.*
+import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
@@ -31,7 +32,8 @@ class StatisticsRepository @Inject constructor(
             overallStats = calculateOverallStats(jumps, sessions),
             recentStats = calculateRecentStats(jumps, sessions),
             progressStats = calculateProgressStats(jumps, sessions),
-            achievementStats = calculateAchievementStats(jumps, sessions)
+            achievementStats = calculateAchievementStats(jumps, sessions),
+            surfaceStats = calculateSurfaceStats(user, sessions)
         )
     }
 
@@ -63,7 +65,8 @@ class StatisticsRepository @Inject constructor(
                     overallStats = calculateOverallStats(jumps, sessions),
                     recentStats = calculateRecentStats(jumps, sessions),
                     progressStats = calculateProgressStats(jumps, sessions),
-                    achievementStats = calculateAchievementStats(jumps, sessions)
+                    achievementStats = calculateAchievementStats(jumps, sessions),
+                    surfaceStats = calculateSurfaceStats(it, sessions)
                 )
             }
         }
@@ -73,7 +76,10 @@ class StatisticsRepository @Inject constructor(
         jumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): OverallStats {
-        if (jumps.isEmpty()) {
+        // Calculate stats from completed sessions (each session = 1 jump)
+        val completedSessions = sessions.filter { it.isCompleted }
+        
+        if (completedSessions.isEmpty()) {
             return OverallStats(
                 totalJumps = 0,
                 totalSessions = sessions.size,
@@ -87,27 +93,28 @@ class StatisticsRepository @Inject constructor(
             )
         }
 
-        val totalFlightTime = jumps.mapNotNull { it.flightTimeMs }.sum()
-        val activeDays = jumps.map { 
-            LocalDate.ofEpochDay(it.timestamp / (24 * 60 * 60 * 1000)) 
+        val activeDays = completedSessions.map { 
+            LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000)) 
         }.distinct().size
 
         return OverallStats(
-            totalJumps = jumps.size,
+            totalJumps = completedSessions.size, // Each completed session = 1 jump
             totalSessions = sessions.size,
-            bestJumpHeight = jumps.maxOfOrNull { it.heightCm } ?: 0.0,
-            averageJumpHeight = jumps.map { it.heightCm }.average(),
-            totalFlightTime = totalFlightTime,
-            averageFlightTime = if (jumps.isNotEmpty()) totalFlightTime / jumps.size else 0L,
-            firstJumpDate = jumps.minOfOrNull { 
+            bestJumpHeight = completedSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            averageJumpHeight = if (completedSessions.isNotEmpty()) {
+                completedSessions.map { it.bestJumpHeight }.average()
+            } else 0.0,
+            totalFlightTime = 0L, // Flight time not tracked in simplified system
+            averageFlightTime = 0L,
+            firstJumpDate = completedSessions.minOfOrNull { 
                 LocalDateTime.ofInstant(
-                    java.time.Instant.ofEpochMilli(it.timestamp),
+                    java.time.Instant.ofEpochMilli(it.startTime),
                     ZoneId.systemDefault()
                 )
             },
-            lastJumpDate = jumps.maxOfOrNull { 
+            lastJumpDate = completedSessions.maxOfOrNull { 
                 LocalDateTime.ofInstant(
-                    java.time.Instant.ofEpochMilli(it.timestamp),
+                    java.time.Instant.ofEpochMilli(it.startTime),
                     ZoneId.systemDefault()
                 )
             },
@@ -131,22 +138,19 @@ class StatisticsRepository @Inject constructor(
 
         return RecentStats(
             last7Days = calculatePeriodStats(
-                jumps.filter { it.timestamp >= sevenDaysAgo },
+                emptyList(), // No longer using jumps
                 sessions.filter { it.startTime >= sevenDaysAgo },
-                jumps.filter { it.timestamp >= fourteenDaysAgo && it.timestamp < sevenDaysAgo },
+                emptyList(),
                 sessions.filter { it.startTime >= fourteenDaysAgo && it.startTime < sevenDaysAgo }
             ),
             last30Days = calculatePeriodStats(
-                jumps.filter { it.timestamp >= thirtyDaysAgo },
+                emptyList(),
                 sessions.filter { it.startTime >= thirtyDaysAgo },
-                jumps.filter { it.timestamp >= sixtyDaysAgo && it.timestamp < thirtyDaysAgo },
+                emptyList(),
                 sessions.filter { it.startTime >= sixtyDaysAgo && it.startTime < thirtyDaysAgo }
             ),
             thisWeek = calculatePeriodStats(
-                jumps.filter { 
-                    val jumpDate = LocalDate.ofEpochDay(it.timestamp / (24 * 60 * 60 * 1000))
-                    !jumpDate.isBefore(weekStart)
-                },
+                emptyList(),
                 sessions.filter {
                     val sessionDate = LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
                     !sessionDate.isBefore(weekStart)
@@ -155,10 +159,7 @@ class StatisticsRepository @Inject constructor(
                 emptyList()
             ),
             thisMonth = calculatePeriodStats(
-                jumps.filter { 
-                    val jumpDate = LocalDate.ofEpochDay(it.timestamp / (24 * 60 * 60 * 1000))
-                    !jumpDate.isBefore(monthStart)
-                },
+                emptyList(),
                 sessions.filter {
                     val sessionDate = LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
                     !sessionDate.isBefore(monthStart)
@@ -175,21 +176,30 @@ class StatisticsRepository @Inject constructor(
         previousJumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         previousSessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): PeriodStats {
-        val currentAvgHeight = if (currentJumps.isNotEmpty()) currentJumps.map { it.heightCm }.average() else 0.0
-        val previousAvgHeight = if (previousJumps.isNotEmpty()) previousJumps.map { it.heightCm }.average() else 0.0
+        // Calculate stats from completed sessions (each session = 1 jump)
+        val completedCurrentSessions = currentSessions.filter { it.isCompleted }
+        val completedPreviousSessions = previousSessions.filter { it.isCompleted }
+        
+        val currentAvgHeight = if (completedCurrentSessions.isNotEmpty()) {
+            completedCurrentSessions.map { it.bestJumpHeight }.average()
+        } else 0.0
+        
+        val previousAvgHeight = if (completedPreviousSessions.isNotEmpty()) {
+            completedPreviousSessions.map { it.bestJumpHeight }.average()
+        } else 0.0
         
         val improvement = if (previousAvgHeight > 0) {
             ((currentAvgHeight - previousAvgHeight) / previousAvgHeight) * 100
         } else 0.0
 
-        val consistencyScore = calculateConsistencyScore(currentJumps)
+        val consistencyScore = calculateConsistencyScoreFromSessions(completedCurrentSessions)
 
         return PeriodStats(
-            jumpCount = currentJumps.size,
+            jumpCount = completedCurrentSessions.size, // Each completed session = 1 jump
             sessionCount = currentSessions.size,
-            bestJumpHeight = currentJumps.maxOfOrNull { it.heightCm } ?: 0.0,
+            bestJumpHeight = completedCurrentSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
             averageJumpHeight = currentAvgHeight,
-            totalFlightTime = currentJumps.mapNotNull { it.flightTimeMs }.sum(),
+            totalFlightTime = 0L, // Flight time not tracked in simplified system
             improvement = improvement,
             consistencyScore = consistencyScore
         )
@@ -209,46 +219,57 @@ class StatisticsRepository @Inject constructor(
         } else 0.0
     }
 
+    private fun calculateConsistencyScoreFromSessions(sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>): Double {
+        if (sessions.isEmpty()) return 0.0
+        
+        val heights = sessions.map { it.bestJumpHeight }
+        val mean = heights.average()
+        val variance = heights.map { (it - mean) * (it - mean) }.average()
+        val standardDeviation = kotlin.math.sqrt(variance)
+        
+        // Lower standard deviation relative to mean = higher consistency
+        return if (mean > 0) {
+            100.0 - ((standardDeviation / mean) * 100).coerceAtMost(100.0)
+        } else 0.0
+    }
+
     private fun calculateProgressStats(
         jumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): ProgressStats {
-        val jumpsByDay = jumps.groupBy { 
-            LocalDate.ofEpochDay(it.timestamp / (24 * 60 * 60 * 1000))
-        }
-        
-        val sessionsByDay = sessions.groupBy { 
+        val completedSessions = sessions.filter { it.isCompleted }
+        val sessionsByDay = completedSessions.groupBy { 
             LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
         }
 
-        val heightProgression = jumpsByDay.map { (date, dayJumps) ->
+        val heightProgression = sessionsByDay.map { (date, daySessions) ->
             HeightDataPoint(
                 date = date,
-                averageHeight = dayJumps.map { it.heightCm }.average(),
-                bestHeight = dayJumps.maxOf { it.heightCm },
-                jumpCount = dayJumps.size
+                averageHeight = daySessions.map { it.bestJumpHeight }.average(),
+                bestHeight = daySessions.maxOf { it.bestJumpHeight },
+                jumpCount = daySessions.size // Each session = 1 jump
             )
         }.sortedBy { it.date }
 
-        val volumeProgression = jumpsByDay.map { (date, dayJumps) ->
+        val volumeProgression = sessionsByDay.map { (date, daySessions) ->
             VolumeDataPoint(
                 date = date,
-                jumpCount = dayJumps.size,
-                sessionCount = sessionsByDay[date]?.size ?: 0,
-                totalFlightTime = dayJumps.mapNotNull { it.flightTimeMs }.sum()
+                jumpCount = daySessions.size, // Each session = 1 jump
+                sessionCount = daySessions.size,
+                totalFlightTime = 0L // Flight time not tracked in simplified system
             )
         }.sortedBy { it.date }
 
         val consistencyProgression = generateDateRange(
-            jumps.minOfOrNull { LocalDate.ofEpochDay(it.timestamp / (24 * 60 * 60 * 1000)) } 
+            completedSessions.minOfOrNull { LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000)) } 
                 ?: LocalDate.now(),
             LocalDate.now()
         ).map { date ->
-            val dayJumps = jumpsByDay[date] ?: emptyList()
+            val daySessions = sessionsByDay[date] ?: emptyList()
             ConsistencyDataPoint(
                 date = date,
-                hasJumped = dayJumps.isNotEmpty(),
-                jumpCount = dayJumps.size
+                hasJumped = daySessions.isNotEmpty(),
+                jumpCount = daySessions.size // Each session = 1 jump
             )
         }
 
@@ -580,20 +601,21 @@ class StatisticsRepository @Inject constructor(
         jumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): QuickStats {
+        val completedSessions = sessions.filter { it.isCompleted }
         val sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000)
-        val last7DaysJumps = jumps.filter { it.timestamp >= sevenDaysAgo }
+        val last7DaysSessions = completedSessions.filter { it.startTime >= sevenDaysAgo }
         
-        val jumpDates = jumps.map { 
-            LocalDate.ofEpochDay(it.timestamp / (24 * 60 * 60 * 1000))
+        val sessionDates = completedSessions.map { 
+            LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
         }.distinct().sorted()
         
-        val currentStreak = calculateCurrentDayStreak(jumpDates)
+        val currentStreak = calculateCurrentDayStreak(sessionDates)
 
         return QuickStats(
-            totalJumps = jumps.size,
+            totalJumps = completedSessions.size, // Each completed session = 1 jump
             currentStreak = currentStreak,
-            personalBest = jumps.maxOfOrNull { it.heightCm } ?: 0.0,
-            last7DaysJumps = last7DaysJumps.size
+            personalBest = completedSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            last7DaysJumps = last7DaysSessions.size
         )
     }
 
@@ -622,5 +644,67 @@ class StatisticsRepository @Inject constructor(
                     isCompleted = session.isCompleted
                 )
             }
+    }
+    
+    private fun calculateSurfaceStats(
+        user: com.watxaut.myjumpapp.data.database.entities.User,
+        sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
+    ): SurfaceFilteredStats {
+        val hardFloorSessions = sessions.filter { it.surfaceType == SurfaceType.HARD_FLOOR }
+        val sandSessions = sessions.filter { it.surfaceType == SurfaceType.SAND }
+        
+        val hardFloorStats = SurfaceSpecificStats(
+            surfaceType = SurfaceType.HARD_FLOOR,
+            totalSessions = user.totalSessionsHardFloor,
+            bestHeight = user.bestJumpHeightHardFloor,
+            averageHeight = if (hardFloorSessions.isNotEmpty()) {
+                hardFloorSessions.map { it.bestJumpHeight }.average()
+            } else 0.0,
+            last7DaysSessions = 0, // TODO: Calculate from actual sessions
+            last30DaysSessions = 0, // TODO: Calculate from actual sessions
+            firstSessionDate = hardFloorSessions.minByOrNull { it.startTime }?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+            },
+            lastSessionDate = hardFloorSessions.maxByOrNull { it.startTime }?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+            }
+        )
+        
+        val sandStats = SurfaceSpecificStats(
+            surfaceType = SurfaceType.SAND,
+            totalSessions = user.totalSessionsSand,
+            bestHeight = user.bestJumpHeightSand,
+            averageHeight = if (sandSessions.isNotEmpty()) {
+                sandSessions.map { it.bestJumpHeight }.average()
+            } else 0.0,
+            last7DaysSessions = 0, // TODO: Calculate from actual sessions
+            last30DaysSessions = 0, // TODO: Calculate from actual sessions
+            firstSessionDate = sandSessions.minByOrNull { it.startTime }?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+            },
+            lastSessionDate = sandSessions.maxByOrNull { it.startTime }?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+            }
+        )
+        
+        val comparison = SurfaceComparison(
+            heightDifferencePercent = if (hardFloorStats.bestHeight > 0 && sandStats.bestHeight > 0) {
+                ((hardFloorStats.bestHeight - sandStats.bestHeight) / hardFloorStats.bestHeight) * 100
+            } else 0.0,
+            preferredSurface = when {
+                hardFloorStats.totalSessions > sandStats.totalSessions -> SurfaceType.HARD_FLOOR
+                sandStats.totalSessions > hardFloorStats.totalSessions -> SurfaceType.SAND
+                else -> null
+            },
+            sessionRatio = if (sandStats.totalSessions > 0) {
+                hardFloorStats.totalSessions.toDouble() / sandStats.totalSessions.toDouble()
+            } else if (hardFloorStats.totalSessions > 0) Double.POSITIVE_INFINITY else 0.0
+        )
+        
+        return SurfaceFilteredStats(
+            hardFloorStats = hardFloorStats,
+            sandStats = sandStats,
+            comparison = comparison
+        )
     }
 }

@@ -20,8 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.watxaut.myjumpapp.domain.jump.JumpPhase
 import com.watxaut.myjumpapp.domain.jump.DebugInfo
+import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import com.watxaut.myjumpapp.presentation.ui.components.CameraPermissionHandler
 import com.watxaut.myjumpapp.presentation.ui.components.CameraPreview
 import com.watxaut.myjumpapp.presentation.ui.components.CameraSetupGuideDialog
@@ -33,6 +33,7 @@ import com.watxaut.myjumpapp.presentation.viewmodels.JumpSessionUiState
 @Composable
 fun CameraScreen(
     userId: String?,
+    surfaceType: SurfaceType,
     onNavigateBack: () -> Unit,
     viewModel: JumpSessionViewModel = hiltViewModel()
 ) {
@@ -40,9 +41,10 @@ fun CameraScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showSetupGuide by remember { mutableStateOf(false) }
     
-    LaunchedEffect(userId) {
+    LaunchedEffect(userId, surfaceType) {
         if (userId != null) {
             viewModel.setUserId(userId)
+            viewModel.setSurfaceType(surfaceType)
         }
     }
     
@@ -59,10 +61,19 @@ fun CameraScreen(
             TopAppBar(
                 title = { 
                     Column {
-                        Text("Jump Detection")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Jump Detection")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = surfaceType.icon,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
                         if (uiState.userName.isNotEmpty()) {
                             Text(
-                                text = uiState.userName,
+                                text = "${uiState.userName} • ${surfaceType.displayName}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -108,6 +119,7 @@ fun CameraScreen(
             CameraPermissionHandler {
                 JumpDetectionContent(
                     uiState = uiState,
+                    surfaceType = surfaceType,
                     onShowGuide = { showSetupGuide = true },
                     onStopSession = { viewModel.stopSession() },
                     onPoseDetected = { imageProxy, pose ->
@@ -130,6 +142,7 @@ fun CameraScreen(
 @Composable
 private fun JumpDetectionContent(
     uiState: JumpSessionUiState,
+    surfaceType: SurfaceType,
     onShowGuide: () -> Unit,
     onStopSession: () -> Unit,
     onPoseDetected: (androidx.camera.core.ImageProxy, com.google.mlkit.vision.pose.Pose) -> Unit,
@@ -172,7 +185,7 @@ private fun JumpDetectionContent(
                     if (uiState.isCalibrating) {
                         CalibrationStatus(uiState.debugInfo)
                     } else {
-                        JumpPhaseIndicator(uiState.jumpPhase)
+                        MaxHeightDisplay(uiState.maxHeight)
                     }
                     
                     // Debug info display
@@ -261,8 +274,8 @@ private fun JumpDetectionContent(
             }
         }
         
-        // Jump Height Display (center overlay)
-        if (uiState.isJumping && uiState.currentJumpHeight > 0) {
+        // Max Height Display (center overlay) - Always show when not calibrating
+        if (!uiState.isCalibrating && uiState.maxHeight > 0) {
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -270,26 +283,28 @@ private fun JumpDetectionContent(
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
                     .padding(24.dp)
             ) {
-                Text(
-                    text = "${String.format("%.1f", uiState.currentJumpHeight)} cm",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "${String.format("%.1f", uiState.maxHeight)} cm",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Max Height (${surfaceType.displayName})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun JumpPhaseIndicator(phase: JumpPhase) {
-    val (text, color) = when (phase) {
-        JumpPhase.STANDING -> "Ready" to MaterialTheme.colorScheme.primary
-        JumpPhase.PREPARING -> "Preparing..." to MaterialTheme.colorScheme.tertiary
-        JumpPhase.AIRBORNE -> "JUMPING!" to MaterialTheme.colorScheme.secondary
-        JumpPhase.LANDING -> "Landing" to MaterialTheme.colorScheme.primary
-    }
-    
+private fun MaxHeightDisplay(maxHeight: Double) {
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -297,14 +312,14 @@ private fun JumpPhaseIndicator(phase: JumpPhase) {
             modifier = Modifier
                 .size(12.dp)
                 .clip(CircleShape)
-                .background(color)
+                .background(MaterialTheme.colorScheme.primary)
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = text,
+            text = "Max Height: ${String.format("%.1f", maxHeight)} cm",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            color = color
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }
@@ -316,21 +331,9 @@ private fun SessionStats(uiState: JumpSessionUiState) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         StatItem(
-            label = "Jumps",
-            value = "${uiState.jumpCount}"
+            label = "Max Height",
+            value = "${String.format("%.1f", uiState.maxHeight)} cm"
         )
-        
-        StatItem(
-            label = "Best",
-            value = "${String.format("%.1f", uiState.bestJumpHeight)} cm"
-        )
-        
-        if (uiState.jumpCount > 0) {
-            StatItem(
-                label = "Avg",
-                value = "${String.format("%.1f", uiState.averageJumpHeight)} cm"
-            )
-        }
     }
 }
 
@@ -363,19 +366,43 @@ private fun CalibrationStatus(debugInfo: DebugInfo) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             CircularProgressIndicator(
-                progress = debugInfo.calibrationProgress.toFloat() / debugInfo.calibrationFramesNeeded.toFloat(),
+                progress = if (debugInfo.isStable) {
+                    debugInfo.calibrationProgress.toFloat() / debugInfo.calibrationFramesNeeded.toFloat()
+                } else {
+                    debugInfo.stabilityProgress
+                },
                 modifier = Modifier.size(20.dp),
-                strokeWidth = 2.dp
+                strokeWidth = 2.dp,
+                color = if (debugInfo.isStable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column {
+                val statusText = when {
+                    !debugInfo.poseDetected -> "Searching for person..."
+                    !debugInfo.isStable -> "Stay steady... ${String.format("%.0f", debugInfo.stabilityProgress * 100)}%"
+                    debugInfo.calibrationProgress > 0 -> "Calibrating... Stand still"
+                    else -> "Ready to calibrate"
+                }
+                
                 Text(
-                    text = if (debugInfo.poseDetected) "Calibrating... Stand still" else "Searching for person...",
+                    text = statusText,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = when {
+                        !debugInfo.poseDetected -> MaterialTheme.colorScheme.error
+                        !debugInfo.isStable -> MaterialTheme.colorScheme.secondary
+                        else -> MaterialTheme.colorScheme.primary
+                    }
                 )
+                
+                val subtitleText = if (debugInfo.isStable) {
+                    "${debugInfo.calibrationProgress}/${debugInfo.calibrationFramesNeeded} frames"
+                } else {
+                    "Minimize movement for 2 seconds"
+                }
+                
                 Text(
-                    text = "${debugInfo.calibrationProgress}/${debugInfo.calibrationFramesNeeded} frames",
+                    text = subtitleText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -385,32 +412,63 @@ private fun CalibrationStatus(debugInfo: DebugInfo) {
         Spacer(modifier = Modifier.height(8.dp))
         
         // Live debug info during calibration
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            DebugItem(
-                label = "Person Height",
-                value = "${String.format("%.0f", debugInfo.currentHeight)}px",
-                color = MaterialTheme.colorScheme.primary
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                DebugItem(
+                    label = "Person Height",
+                    value = "${String.format("%.0f", debugInfo.currentHeight)}px",
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                DebugItem(
+                    label = "Body",
+                    value = if (debugInfo.poseDetected) "✓ Detected" else "✗ Not found",
+                    color = if (debugInfo.poseDetected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+                
+                DebugItem(
+                    label = "Landmarks",
+                    value = "${debugInfo.landmarksDetected}",
+                    color = if (debugInfo.landmarksDetected >= 10) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+                )
+                
+                DebugItem(
+                    label = "Confidence",
+                    value = "${String.format("%.0f", debugInfo.confidenceScore * 100)}%",
+                    color = if (debugInfo.confidenceScore > 0.5f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+                )
+            }
             
-            DebugItem(
-                label = "Body",
-                value = if (debugInfo.poseDetected) "✓ Detected" else "✗ Not found",
-                color = if (debugInfo.poseDetected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-            )
-            
-            DebugItem(
-                label = "Landmarks",
-                value = "${debugInfo.landmarksDetected}",
-                color = if (debugInfo.landmarksDetected >= 10) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
-            )
-            
-            DebugItem(
-                label = "Confidence",
-                value = "${String.format("%.0f", debugInfo.confidenceScore * 100)}%",
-                color = if (debugInfo.confidenceScore > 0.5f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
-            )
+            // Additional debug info
+            if (debugInfo.totalBodyHeightPixels > 0) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    DebugItem(
+                        label = "Body Height",
+                        value = "${String.format("%.0f", debugInfo.totalBodyHeightPixels)}px",
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    
+                    DebugItem(
+                        label = "Pixel Ratio",
+                        value = "${String.format("%.2f", debugInfo.pixelToCmRatio)}",
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    
+                    if (debugInfo.userHeightCm > 0) {
+                        DebugItem(
+                            label = "User Height",
+                            value = "${String.format("%.0f", debugInfo.userHeightCm)}cm",
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -435,30 +493,107 @@ private fun DebugInfoDisplay(debugInfo: DebugInfo) {
             
             Spacer(modifier = Modifier.height(8.dp))
             
+            // First row - Hip measurements
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 DebugItem(
-                    label = "Person Height",
-                    value = "${String.format("%.0f", debugInfo.currentHeight)}px",
-                    color = MaterialTheme.colorScheme.primary
-                )
-                
-                DebugItem(
-                    label = "Baseline",
-                    value = "${String.format("%.1f", debugInfo.baselineHeight)}px",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                
-                DebugItem(
-                    label = "Diff",
-                    value = "${String.format("%+.2f", debugInfo.heightDifference)}px",
-                    color = if (Math.abs(debugInfo.heightDifference) > 0.02) 
+                    label = "Hip Height",
+                    value = "${String.format("%+.1f", debugInfo.hipHeightCm)}cm",
+                    color = if (Math.abs(debugInfo.hipHeightCm) > 5.0) 
                         MaterialTheme.colorScheme.secondary 
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                DebugItem(
+                    label = "Hip Y (Current)",
+                    value = "${String.format("%.0f", debugInfo.currentHipYPixels)}px",
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                DebugItem(
+                    label = "Hip Y (Baseline)",
+                    value = "${String.format("%.0f", debugInfo.baselineHipYPixels)}px",
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.weight(1f)
                 )
             }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Second row - Movement and ratios
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                DebugItem(
+                    label = "Hip Movement",
+                    value = "${String.format("%.0f", debugInfo.hipMovementPixels)}px",
+                    color = if (debugInfo.hipMovementPixels > 10) 
+                        MaterialTheme.colorScheme.secondary 
+                    else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                DebugItem(
+                    label = "Body Height",
+                    value = "${String.format("%.0f", debugInfo.totalBodyHeightPixels)}px",
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                DebugItem(
+                    label = "Pixel Ratio",
+                    value = "${String.format("%.2f", debugInfo.pixelToCmRatio)}",
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Third row - Confidence and quality metrics
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                DebugItem(
+                    label = "Confidence",
+                    value = "${String.format("%.0f", debugInfo.confidenceScore * 100)}%",
+                    color = if (debugInfo.confidenceScore > 0.9f) 
+                        Color.Green 
+                    else if (debugInfo.confidenceScore > 0.7f) 
+                        Color(0xFFFF9800) 
+                    else Color.Red,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                DebugItem(
+                    label = "Landmarks",
+                    value = "${debugInfo.landmarksDetected}",
+                    color = if (debugInfo.landmarksDetected >= 30) 
+                        Color.Green 
+                    else Color(0xFFFF9800),
+                    modifier = Modifier.weight(1f)
+                )
+                
+                if (debugInfo.userHeightCm > 0) {
+                    DebugItem(
+                        label = "User Height",
+                        value = "${String.format("%.0f", debugInfo.userHeightCm)}cm",
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
         }
     }
 }
@@ -467,21 +602,25 @@ private fun DebugInfoDisplay(debugInfo: DebugInfo) {
 private fun DebugItem(
     label: String,
     value: String,
-    color: Color
+    color: Color,
+    modifier: Modifier = Modifier
 ) {
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
     ) {
         Text(
             text = value,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = color
+            color = color,
+            textAlign = TextAlign.Center
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
     }
 }

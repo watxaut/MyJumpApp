@@ -12,8 +12,8 @@ import com.watxaut.myjumpapp.data.repository.JumpRepository
 import com.watxaut.myjumpapp.data.repository.JumpSessionRepository
 import com.watxaut.myjumpapp.data.repository.UserRepository
 import com.watxaut.myjumpapp.domain.jump.JumpDetector
-import com.watxaut.myjumpapp.domain.jump.JumpPhase
 import com.watxaut.myjumpapp.domain.jump.DebugInfo
+import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import com.watxaut.myjumpapp.utils.WakeLockManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -26,14 +26,10 @@ data class JumpSessionUiState(
     val userId: String? = null,
     val userName: String = "",
     val currentSessionId: String? = null,
-    val jumpCount: Int = 0,
-    val currentJumpHeight: Double = 0.0,
-    val bestJumpHeight: Double = 0.0,
-    val averageJumpHeight: Double = 0.0,
     val sessionDuration: Long = 0L,
     val isCalibrating: Boolean = true,
-    val jumpPhase: JumpPhase = JumpPhase.STANDING,
-    val isJumping: Boolean = false,
+    val maxHeight: Double = 0.0,
+    val surfaceType: SurfaceType = SurfaceType.HARD_FLOOR,
     val debugInfo: DebugInfo = DebugInfo(),
     val error: String? = null
 )
@@ -51,10 +47,8 @@ class JumpSessionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(JumpSessionUiState())
     val uiState: StateFlow<JumpSessionUiState> = _uiState.asStateFlow()
     
-    private val jumpHeights = mutableListOf<Double>()
     private var sessionStartTime: Long = 0L
     private var currentSession: JumpSession? = null
-    private var hasRecordedCurrentJump: Boolean = false
     
     init {
         // Observe jump detection
@@ -63,17 +57,15 @@ class JumpSessionViewModel @Inject constructor(
                 val wasCalibrating = _uiState.value.isCalibrating
                 val isNowCalibrating = jumpData.debugInfo.calibrationProgress < jumpData.debugInfo.calibrationFramesNeeded
                 
-                Log.d("JumpSessionViewModel", "Jump data update: phase=${jumpData.phase}, isJumping=${jumpData.isJumping}, height=${jumpData.jumpHeight}, wasCalibrating=$wasCalibrating, isNowCalibrating=$isNowCalibrating, calibrationProgress=${jumpData.debugInfo.calibrationProgress}/${jumpData.debugInfo.calibrationFramesNeeded}")
+                Log.d("JumpSessionViewModel", "Jump data update: maxHeight=${jumpData.maxHeight}, wasCalibrating=$wasCalibrating, isNowCalibrating=$isNowCalibrating, calibrationProgress=${jumpData.debugInfo.calibrationProgress}/${jumpData.debugInfo.calibrationFramesNeeded}")
                 
                 _uiState.update { currentState ->
                     val newState = currentState.copy(
-                        jumpPhase = jumpData.phase,
-                        isJumping = jumpData.isJumping,
-                        currentJumpHeight = jumpData.jumpHeight,
+                        maxHeight = jumpData.maxHeight,
                         isCalibrating = isNowCalibrating,
                         debugInfo = jumpData.debugInfo
                     )
-                    Log.i("JumpSessionViewModel", "State updated: isCalibrating=${newState.isCalibrating}, jumpPhase=${newState.jumpPhase}, isSessionActive=${newState.isSessionActive}")
+                    Log.i("JumpSessionViewModel", "State updated: isCalibrating=${newState.isCalibrating}, maxHeight=${newState.maxHeight}, isSessionActive=${newState.isSessionActive}")
                     newState
                 }
                 
@@ -92,25 +84,14 @@ class JumpSessionViewModel @Inject constructor(
                         }
                     }
                     
-                    startSession(_uiState.value.userId!!)
+                    startSession(_uiState.value.userId!!, _uiState.value.surfaceType)
                 }
                 
-                // Record completed jump (only once per jump)
-                if (jumpData.phase == JumpPhase.LANDING && jumpData.jumpHeight > 0 && !hasRecordedCurrentJump) {
-                    Log.i("JumpSessionViewModel", "Recording jump: height=${jumpData.jumpHeight}cm, airTime=${jumpData.airTime}ms")
-                    recordJump(jumpData.jumpHeight, jumpData.airTime)
-                    hasRecordedCurrentJump = true
-                }
-                
-                // Reset the flag when returning to standing (ready for next jump)
-                if (jumpData.phase == JumpPhase.STANDING) {
-                    hasRecordedCurrentJump = false
-                }
             }
         }
     }
     
-    fun startSession(userId: String) {
+    fun startSession(userId: String, surfaceType: SurfaceType = SurfaceType.HARD_FLOOR) {
         Log.i("JumpSessionViewModel", "Starting session for user: $userId")
         viewModelScope.launch {
             try {
@@ -125,8 +106,9 @@ class JumpSessionViewModel @Inject constructor(
                 // Create new session
                 val session = JumpSession(
                     userId = userId,
-                    sessionName = "Jump Session ${System.currentTimeMillis()}",
+                    sessionName = "${surfaceType.displayName} Session ${System.currentTimeMillis()}",
                     startTime = System.currentTimeMillis(),
+                    surfaceType = surfaceType,
                     isCompleted = false
                 )
                 Log.i("JumpSessionViewModel", "Created session: ${session.sessionId}")
@@ -139,8 +121,6 @@ class JumpSessionViewModel @Inject constructor(
                 wakeLockManager.acquireWakeLock(context)
                 Log.i("JumpSessionViewModel", "Wake lock acquired")
                 
-                // Clear jump history (calibration already completed)
-                jumpHeights.clear()
                 Log.i("JumpSessionViewModel", "Session started with completed calibration")
                 
                 _uiState.update {
@@ -149,10 +129,7 @@ class JumpSessionViewModel @Inject constructor(
                         userId = userId,
                         userName = user.userName,
                         currentSessionId = session.sessionId,
-                        jumpCount = 0,
-                        currentJumpHeight = 0.0,
-                        bestJumpHeight = 0.0,
-                        averageJumpHeight = 0.0,
+                        surfaceType = surfaceType,
                         sessionDuration = 0L,
                         isCalibrating = true,
                         error = null
@@ -179,9 +156,9 @@ class JumpSessionViewModel @Inject constructor(
                 // Update session with final statistics
                 val updatedSession = session.copy(
                     endTime = System.currentTimeMillis(),
-                    totalJumps = currentState.jumpCount,
-                    bestJumpHeight = currentState.bestJumpHeight,
-                    averageJumpHeight = currentState.averageJumpHeight,
+                    totalJumps = 1, // Each session counts as 1 jump
+                    bestJumpHeight = currentState.maxHeight,
+                    averageJumpHeight = currentState.maxHeight,
                     isCompleted = true
                 )
                 
@@ -190,13 +167,49 @@ class JumpSessionViewModel @Inject constructor(
                 // Update user statistics
                 val user = userRepository.getUserById(session.userId)
                 if (user != null) {
-                    val newTotalJumps = user.totalJumps + currentState.jumpCount
-                    val newBestHeight = maxOf(user.bestJumpHeight, currentState.bestJumpHeight)
+                    val newBestHeight = maxOf(user.bestJumpHeight, currentState.maxHeight)
                     
+                    // Update overall stats - increment jump count
                     userRepository.updateUserStats(
                         userId = session.userId,
-                        totalJumps = newTotalJumps,
+                        totalJumps = user.totalJumps + 1,
                         bestHeight = newBestHeight
+                    )
+                    
+                    // Update surface-specific stats
+                    val currentSurfaceType = session.surfaceType
+                    val newBestHeightHardFloor = if (currentSurfaceType == SurfaceType.HARD_FLOOR) {
+                        maxOf(user.bestJumpHeightHardFloor, currentState.maxHeight)
+                    } else user.bestJumpHeightHardFloor
+                    
+                    val newBestHeightSand = if (currentSurfaceType == SurfaceType.SAND) {
+                        maxOf(user.bestJumpHeightSand, currentState.maxHeight)
+                    } else user.bestJumpHeightSand
+                    
+                    val newSessionsHardFloor = if (currentSurfaceType == SurfaceType.HARD_FLOOR) {
+                        user.totalSessionsHardFloor + 1
+                    } else user.totalSessionsHardFloor
+                    
+                    val newSessionsSand = if (currentSurfaceType == SurfaceType.SAND) {
+                        user.totalSessionsSand + 1
+                    } else user.totalSessionsSand
+                    
+                    val newJumpsHardFloor = if (currentSurfaceType == SurfaceType.HARD_FLOOR) {
+                        user.totalJumpsHardFloor + 1
+                    } else user.totalJumpsHardFloor
+                    
+                    val newJumpsSand = if (currentSurfaceType == SurfaceType.SAND) {
+                        user.totalJumpsSand + 1
+                    } else user.totalJumpsSand
+                    
+                    userRepository.updateSurfaceSpecificStats(
+                        userId = session.userId,
+                        bestHeightHardFloor = newBestHeightHardFloor,
+                        bestHeightSand = newBestHeightSand,
+                        totalSessionsHardFloor = newSessionsHardFloor,
+                        totalSessionsSand = newSessionsSand,
+                        totalJumpsHardFloor = newJumpsHardFloor,
+                        totalJumpsSand = newJumpsSand
                     )
                 }
                 
@@ -205,8 +218,6 @@ class JumpSessionViewModel @Inject constructor(
                 
                 // Reset state and trigger new calibration
                 currentSession = null
-                jumpHeights.clear()
-                hasRecordedCurrentJump = false
                 jumpDetector.resetCalibration()
                 
                 _uiState.update {
@@ -244,46 +255,6 @@ class JumpSessionViewModel @Inject constructor(
         }
     }
     
-    private fun recordJump(height: Double, airTime: Long) {
-        val session = currentSession ?: return
-        val currentState = _uiState.value
-        
-        viewModelScope.launch {
-            try {
-                // Create jump record
-                val jump = Jump(
-                    sessionId = session.sessionId,
-                    userId = session.userId,
-                    heightCm = height,
-                    flightTimeMs = airTime,
-                    timestamp = System.currentTimeMillis()
-                )
-                
-                jumpRepository.insertJump(jump)
-                
-                // Update statistics
-                jumpHeights.add(height)
-                val newJumpCount = jumpHeights.size
-                val newBestHeight = jumpHeights.maxOrNull() ?: 0.0
-                val newAverageHeight = if (jumpHeights.isNotEmpty()) {
-                    jumpHeights.average()
-                } else 0.0
-                
-                _uiState.update { currentState ->
-                    currentState.copy(
-                        jumpCount = newJumpCount,
-                        bestJumpHeight = newBestHeight,
-                        averageJumpHeight = newAverageHeight
-                    )
-                }
-                
-            } catch (exception: Exception) {
-                _uiState.update {
-                    it.copy(error = exception.message ?: "Failed to record jump")
-                }
-            }
-        }
-    }
     
     fun clearError() {
         _uiState.update { it.copy(error = null) }
@@ -303,6 +274,12 @@ class JumpSessionViewModel @Inject constructor(
         }
     }
     
+    fun setSurfaceType(surfaceType: SurfaceType) {
+        _uiState.update {
+            it.copy(surfaceType = surfaceType)
+        }
+    }
+    
     fun resetToInitialState() {
         // Stop any active session
         if (_uiState.value.isSessionActive) {
@@ -311,8 +288,6 @@ class JumpSessionViewModel @Inject constructor(
         
         // Reset everything to initial state
         currentSession = null
-        jumpHeights.clear()
-        hasRecordedCurrentJump = false
         jumpDetector.resetCalibration()
         
         // Release wake lock

@@ -2,6 +2,7 @@ package com.watxaut.myjumpapp.data.repository
 
 import com.watxaut.myjumpapp.data.database.dao.UserDao
 import com.watxaut.myjumpapp.data.database.entities.User
+import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -41,6 +42,26 @@ class UserRepository @Inject constructor(
     
     suspend fun updateUserStats(userId: String, totalJumps: Int, bestHeight: Double) {
         userDao.updateUserStats(userId, totalJumps, bestHeight)
+    }
+    
+    suspend fun updateSurfaceSpecificStats(
+        userId: String,
+        bestHeightHardFloor: Double,
+        bestHeightSand: Double,
+        totalSessionsHardFloor: Int,
+        totalSessionsSand: Int,
+        totalJumpsHardFloor: Int,
+        totalJumpsSand: Int
+    ) {
+        userDao.updateSurfaceSpecificStats(
+            userId = userId,
+            bestHeightHardFloor = bestHeightHardFloor,
+            bestHeightSand = bestHeightSand,
+            totalSessionsHardFloor = totalSessionsHardFloor,
+            totalSessionsSand = totalSessionsSand,
+            totalJumpsHardFloor = totalJumpsHardFloor,
+            totalJumpsSand = totalJumpsSand
+        )
     }
     
     suspend fun getActiveUserCount(): Int {

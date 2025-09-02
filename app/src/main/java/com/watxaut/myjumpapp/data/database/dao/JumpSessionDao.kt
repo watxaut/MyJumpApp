@@ -2,6 +2,7 @@ package com.watxaut.myjumpapp.data.database.dao
 
 import androidx.room.*
 import com.watxaut.myjumpapp.data.database.entities.JumpSession
+import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -48,4 +49,17 @@ interface JumpSessionDao {
     
     @Query("SELECT * FROM jump_sessions WHERE user_id = :userId ORDER BY start_time ASC")
     fun getSessionsByUserIdFlow(userId: String): Flow<List<JumpSession>>
+    
+    // Surface type filtering methods
+    @Query("SELECT * FROM jump_sessions WHERE user_id = :userId AND surface_type = :surfaceType ORDER BY start_time DESC")
+    fun getSessionsByUserAndSurface(userId: String, surfaceType: String): Flow<List<JumpSession>>
+    
+    @Query("SELECT * FROM jump_sessions WHERE user_id = :userId AND surface_type = :surfaceType AND is_completed = 1 ORDER BY start_time DESC")
+    suspend fun getCompletedSessionsByUserAndSurface(userId: String, surfaceType: String): List<JumpSession>
+    
+    @Query("SELECT COUNT(*) FROM jump_sessions WHERE user_id = :userId AND surface_type = :surfaceType AND is_completed = 1")
+    suspend fun getSessionCountByUserAndSurface(userId: String, surfaceType: String): Int
+    
+    @Query("SELECT MAX(best_jump_height) FROM jump_sessions WHERE user_id = :userId AND surface_type = :surfaceType AND is_completed = 1")
+    suspend fun getBestHeightByUserAndSurface(userId: String, surfaceType: String): Double?
 }

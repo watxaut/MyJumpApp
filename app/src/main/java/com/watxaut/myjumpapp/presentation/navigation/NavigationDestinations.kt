@@ -3,8 +3,11 @@ package com.watxaut.myjumpapp.presentation.navigation
 sealed class NavigationDestinations(val route: String) {
     object Home : NavigationDestinations("home")
     object UserSelection : NavigationDestinations("user_selection")
-    object Camera : NavigationDestinations("camera/{userId}") {
-        fun createRoute(userId: String) = "camera/$userId"
+    object SurfaceSelection : NavigationDestinations("surface_selection/{userId}") {
+        fun createRoute(userId: String) = "surface_selection/$userId"
+    }
+    object Camera : NavigationDestinations("camera/{userId}/{surfaceType}") {
+        fun createRoute(userId: String, surfaceType: String) = "camera/$userId/$surfaceType"
     }
     object Statistics : NavigationDestinations("statistics/{userId}") {
         fun createRoute(userId: String) = "statistics/$userId"

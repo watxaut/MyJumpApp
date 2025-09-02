@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.watxaut.myjumpapp.domain.statistics.*
+import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import com.watxaut.myjumpapp.presentation.viewmodels.StatisticsViewModel
 import java.time.format.DateTimeFormatter
 
@@ -103,6 +104,11 @@ fun StatisticsScreen(
                     Tab(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
+                        text = { Text("Surfaces") }
+                    )
+                    Tab(
+                        selected = selectedTab == 4,
+                        onClick = { selectedTab = 4 },
                         text = { Text("Achievements") }
                     )
                 }
@@ -120,7 +126,10 @@ fun StatisticsScreen(
                     2 -> RecordsTab(
                         statistics = uiState.userStatistics!!
                     )
-                    3 -> AchievementsTab(
+                    3 -> SurfacesTab(
+                        statistics = uiState.userStatistics!!
+                    )
+                    4 -> AchievementsTab(
                         statistics = uiState.userStatistics!!,
                         viewModel = viewModel
                     )
@@ -1039,5 +1048,337 @@ private fun TimePeriod.displayName(): String {
         TimePeriod.LAST_90_DAYS -> "Last 90 Days"
         TimePeriod.THIS_YEAR -> "This Year"
         TimePeriod.ALL_TIME -> "All Time"
+    }
+}
+
+@Composable
+private fun SurfacesTab(
+    statistics: UserStatistics
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Surface Comparison Header
+        item {
+            Text(
+                text = "Performance by Surface",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+        
+        // Hard Floor vs Sand Cards
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SurfaceStatsCard(
+                    surfaceStats = statistics.surfaceStats.hardFloorStats,
+                    modifier = Modifier.weight(1f)
+                )
+                SurfaceStatsCard(
+                    surfaceStats = statistics.surfaceStats.sandStats,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        
+        // Comparison Section
+        item {
+            ComparisonCard(
+                comparison = statistics.surfaceStats.comparison
+            )
+        }
+        
+        // Detailed Performance Section
+        item {
+            Text(
+                text = "Detailed Performance",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        }
+        
+        item {
+            DetailedSurfaceComparison(
+                hardFloorStats = statistics.surfaceStats.hardFloorStats,
+                sandStats = statistics.surfaceStats.sandStats
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SurfaceStatsCard(
+    surfaceStats: SurfaceSpecificStats,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = if (surfaceStats.surfaceType == SurfaceType.HARD_FLOOR) 
+                MaterialTheme.colorScheme.primaryContainer
+            else 
+                MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Surface Icon and Name
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = surfaceStats.surfaceType.icon,
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = surfaceStats.surfaceType.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Best Height
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "${String.format("%.1f", surfaceStats.bestHeight)} cm",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Best Height",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Sessions Count
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "${surfaceStats.totalSessions}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Sessions",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Average Height
+            if (surfaceStats.averageHeight > 0) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${String.format("%.1f", surfaceStats.averageHeight)} cm",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Average",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ComparisonCard(
+    comparison: SurfaceComparison
+) {
+    Card {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Performance Comparison",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            
+            // Height Difference
+            if (comparison.heightDifferencePercent != 0.0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Height Difference:",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "${String.format("%.1f", kotlin.math.abs(comparison.heightDifferencePercent))}% ${if (comparison.heightDifferencePercent > 0) "higher on hard floor" else "higher on sand"}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Preferred Surface
+            comparison.preferredSurface?.let { preferred ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Most Used Surface:",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = preferred.icon)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = preferred.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Session Ratio
+            if (comparison.sessionRatio.isFinite() && comparison.sessionRatio > 0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Session Ratio:",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "${String.format("%.1f", comparison.sessionRatio)}:1 (Hard Floor:Sand)",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailedSurfaceComparison(
+    hardFloorStats: SurfaceSpecificStats,
+    sandStats: SurfaceSpecificStats
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        DetailedComparisonRow(
+            label = "Best Height",
+            hardFloorValue = "${String.format("%.1f", hardFloorStats.bestHeight)} cm",
+            sandValue = "${String.format("%.1f", sandStats.bestHeight)} cm"
+        )
+        
+        DetailedComparisonRow(
+            label = "Average Height", 
+            hardFloorValue = "${String.format("%.1f", hardFloorStats.averageHeight)} cm",
+            sandValue = "${String.format("%.1f", sandStats.averageHeight)} cm"
+        )
+        
+        DetailedComparisonRow(
+            label = "Total Sessions",
+            hardFloorValue = "${hardFloorStats.totalSessions}",
+            sandValue = "${sandStats.totalSessions}"
+        )
+        
+        DetailedComparisonRow(
+            label = "First Session",
+            hardFloorValue = hardFloorStats.firstSessionDate?.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")) ?: "None",
+            sandValue = sandStats.firstSessionDate?.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")) ?: "None"
+        )
+        
+        DetailedComparisonRow(
+            label = "Last Session", 
+            hardFloorValue = hardFloorStats.lastSessionDate?.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")) ?: "None",
+            sandValue = sandStats.lastSessionDate?.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")) ?: "None"
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DetailedComparisonRow(
+    label: String,
+    hardFloorValue: String,
+    sandValue: String
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            
+            Row(
+                modifier = Modifier.weight(2f),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "🏀",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = hardFloorValue,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "🏖️",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = sandValue,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
     }
 }

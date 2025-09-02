@@ -35,6 +35,24 @@ data class User(
     @ColumnInfo(name = "best_jump_height")
     val bestJumpHeight: Double = 0.0,
     
+    @ColumnInfo(name = "best_jump_height_hard_floor")
+    val bestJumpHeightHardFloor: Double = 0.0,
+    
+    @ColumnInfo(name = "best_jump_height_sand")
+    val bestJumpHeightSand: Double = 0.0,
+    
+    @ColumnInfo(name = "total_sessions_hard_floor")
+    val totalSessionsHardFloor: Int = 0,
+    
+    @ColumnInfo(name = "total_sessions_sand")
+    val totalSessionsSand: Int = 0,
+    
+    @ColumnInfo(name = "total_jumps_hard_floor")
+    val totalJumpsHardFloor: Int = 0,
+    
+    @ColumnInfo(name = "total_jumps_sand")
+    val totalJumpsSand: Int = 0,
+    
     @ColumnInfo(name = "is_active")
     val isActive: Boolean = true
 )
