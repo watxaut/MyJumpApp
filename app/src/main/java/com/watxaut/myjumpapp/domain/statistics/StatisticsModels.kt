@@ -1,0 +1,193 @@
+package com.watxaut.myjumpapp.domain.statistics
+
+import java.time.LocalDate
+import java.time.LocalDateTime
+
+data class UserStatistics(
+    val userId: String,
+    val userName: String,
+    val overallStats: OverallStats,
+    val recentStats: RecentStats,
+    val progressStats: ProgressStats,
+    val achievementStats: AchievementStats
+)
+
+data class OverallStats(
+    val totalJumps: Int,
+    val totalSessions: Int,
+    val bestJumpHeight: Double,
+    val averageJumpHeight: Double,
+    val totalFlightTime: Long, // in milliseconds
+    val averageFlightTime: Long, // in milliseconds
+    val firstJumpDate: LocalDateTime?,
+    val lastJumpDate: LocalDateTime?,
+    val activeDays: Int
+)
+
+data class RecentStats(
+    val last7Days: PeriodStats,
+    val last30Days: PeriodStats,
+    val thisWeek: PeriodStats,
+    val thisMonth: PeriodStats
+)
+
+data class PeriodStats(
+    val jumpCount: Int,
+    val sessionCount: Int,
+    val bestJumpHeight: Double,
+    val averageJumpHeight: Double,
+    val totalFlightTime: Long,
+    val improvement: Double, // percentage change from previous period
+    val consistencyScore: Double // 0-100, based on regularity of jumping
+)
+
+data class ProgressStats(
+    val heightProgression: List<HeightDataPoint>,
+    val volumeProgression: List<VolumeDataPoint>,
+    val consistencyProgression: List<ConsistencyDataPoint>
+)
+
+data class HeightDataPoint(
+    val date: LocalDate,
+    val averageHeight: Double,
+    val bestHeight: Double,
+    val jumpCount: Int
+)
+
+data class VolumeDataPoint(
+    val date: LocalDate,
+    val jumpCount: Int,
+    val sessionCount: Int,
+    val totalFlightTime: Long
+)
+
+data class ConsistencyDataPoint(
+    val date: LocalDate,
+    val hasJumped: Boolean,
+    val jumpCount: Int
+)
+
+data class AchievementStats(
+    val personalRecords: PersonalRecords,
+    val milestones: List<Milestone>,
+    val streaks: StreakStats
+)
+
+data class PersonalRecords(
+    val highestJump: JumpRecord?,
+    val longestFlightTime: JumpRecord?,
+    val mostJumpsInSession: SessionRecord?,
+    val mostJumpsInDay: DayRecord?,
+    val bestAverageHeightInSession: SessionRecord?
+)
+
+data class JumpRecord(
+    val jumpId: String,
+    val height: Double,
+    val flightTime: Long?,
+    val date: LocalDateTime,
+    val sessionId: String?
+)
+
+data class SessionRecord(
+    val sessionId: String,
+    val value: Double, // height or count
+    val jumpCount: Int,
+    val date: LocalDateTime
+)
+
+data class DayRecord(
+    val date: LocalDate,
+    val jumpCount: Int,
+    val sessionCount: Int,
+    val bestHeight: Double
+)
+
+data class Milestone(
+    val id: String,
+    val title: String,
+    val description: String,
+    val targetValue: Double,
+    val currentValue: Double,
+    val isAchieved: Boolean,
+    val achievedDate: LocalDateTime?,
+    val category: MilestoneCategory
+)
+
+enum class MilestoneCategory {
+    HEIGHT,
+    VOLUME,
+    CONSISTENCY,
+    FLIGHT_TIME
+}
+
+data class StreakStats(
+    val currentStreak: Int, // consecutive days with jumps
+    val longestStreak: Int,
+    val currentWeeklyStreak: Int, // consecutive weeks with jumps
+    val longestWeeklyStreak: Int,
+    val lastActiveDate: LocalDate?
+)
+
+// Statistics for dashboard/summary views
+data class DashboardStats(
+    val todayStats: DayStats,
+    val weekStats: WeekStats,
+    val quickStats: QuickStats,
+    val recentSessions: List<SessionSummary>
+)
+
+data class DayStats(
+    val date: LocalDate,
+    val jumpCount: Int,
+    val sessionCount: Int,
+    val bestJumpHeight: Double,
+    val totalFlightTime: Long
+)
+
+data class WeekStats(
+    val weekStart: LocalDate,
+    val jumpCount: Int,
+    val sessionCount: Int,
+    val activeDays: Int,
+    val bestJumpHeight: Double,
+    val averageJumpHeight: Double
+)
+
+data class QuickStats(
+    val totalJumps: Int,
+    val currentStreak: Int,
+    val personalBest: Double,
+    val last7DaysJumps: Int
+)
+
+data class SessionSummary(
+    val sessionId: String,
+    val sessionName: String?,
+    val date: LocalDateTime,
+    val jumpCount: Int,
+    val bestJumpHeight: Double,
+    val averageJumpHeight: Double,
+    val duration: Long, // in milliseconds
+    val isCompleted: Boolean
+)
+
+// Time period enums for filtering
+enum class TimePeriod {
+    TODAY,
+    THIS_WEEK,
+    THIS_MONTH,
+    LAST_7_DAYS,
+    LAST_30_DAYS,
+    LAST_90_DAYS,
+    THIS_YEAR,
+    ALL_TIME
+}
+
+enum class StatisticType {
+    HEIGHT,
+    VOLUME,
+    CONSISTENCY,
+    FLIGHT_TIME,
+    SESSIONS
+}

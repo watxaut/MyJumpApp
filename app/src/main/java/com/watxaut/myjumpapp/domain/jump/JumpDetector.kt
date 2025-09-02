@@ -49,6 +49,8 @@ class JumpDetector @Inject constructor() {
     private var frameCount = 0
     private var calibrationFrames = 60 // Frames to establish baseline
     private var heightHistory = mutableListOf<Double>()
+    private var fullBodyPixelHeights = mutableListOf<Double>() // For pixel-to-cm ratio calculation
+    private var pixelToCmRatio: Double = 1.0 // Pixels per cm
     private var isCalibrated = false
     
     private val jumpThreshold = 0.3 // 30cm threshold for detecting a jump  
@@ -104,7 +106,7 @@ class JumpDetector @Inject constructor() {
         val smoothedHeight = heightHistory.average()
         
         if (!isCalibrated) {
-            calibrateBaseline(smoothedHeight)
+            calibrateBaseline(smoothedHeight, pose)
             return
         }
         
@@ -112,16 +114,36 @@ class JumpDetector @Inject constructor() {
         previousHeight = smoothedHeight
     }
     
-    private fun calibrateBaseline(height: Double) {
+    private fun calibrateBaseline(height: Double, pose: Pose) {
         frameCount++
         Log.i("JumpDetector", "Calibration frame $frameCount/$calibrationFrames - height: $height")
         
         if (frameCount <= calibrationFrames) {
             baselineHeight = ((baselineHeight * (frameCount - 1)) + height) / frameCount
             Log.i("JumpDetector", "Updated baseline height: $baselineHeight")
+            
+            // Collect full body pixel heights in the last half of calibration (frames 31-60)
+            if (frameCount > calibrationFrames / 2) {
+                val fullBodyPixelHeight = calculateFullBodyPixelHeight(pose)
+                if (fullBodyPixelHeight != null) {
+                    fullBodyPixelHeights.add(fullBodyPixelHeight)
+                    Log.d("JumpDetector", "Collected full body pixel height: $fullBodyPixelHeight (frame $frameCount)")
+                }
+            }
         } else {
+            // Calculate pixel-to-cm ratio using collected measurements
+            if (fullBodyPixelHeights.isNotEmpty()) {
+                val averagePixelHeight = fullBodyPixelHeights.average()
+                // This will be updated when user height is provided
+                pixelToCmRatio = 1.0
+                Log.i("JumpDetector", "Pixel-to-cm ratio calculated: $pixelToCmRatio (avgPixelHeight: $averagePixelHeight)")
+            } else {
+                Log.w("JumpDetector", "No full body measurements collected, using default ratio")
+                pixelToCmRatio = 1.0
+            }
+            
             isCalibrated = true
-            Log.i("JumpDetector", "Calibration completed! Final baseline height: $baselineHeight")
+            Log.i("JumpDetector", "Calibration completed! Final baseline height: $baselineHeight, pixel-to-cm ratio: $pixelToCmRatio")
             _jumpData.value = _jumpData.value.copy(phase = JumpPhase.STANDING)
         }
     }
@@ -169,7 +191,8 @@ class JumpDetector @Inject constructor() {
                 // Detect landing (return to near baseline)
                 if (abs(currentHeight - baselineHeight) < landingThreshold) {
                     val airTime = System.currentTimeMillis() - jumpStartTime
-                    val jumpHeight = (maxHeightReached - baselineHeight) * 0.3 // Convert pixels to cm (approximate)
+                    val jumpHeightPixels = maxHeightReached - baselineHeight
+                    val jumpHeight = jumpHeightPixels / pixelToCmRatio // Convert pixels to cm using calibrated ratio
                     
                     Log.i("JumpDetector", "AIRBORNE -> LANDING: Jump completed! Height: ${String.format("%.1f", jumpHeight)}cm, Air time: ${airTime}ms")
                     _jumpData.value = currentData.copy(
@@ -225,6 +248,30 @@ class JumpDetector @Inject constructor() {
         // Return the distance between hip center and ankle center
         // Note: In camera coordinates, Y increases downward, so we use ankle - hip
         return height
+    }
+    
+    private fun calculateFullBodyPixelHeight(pose: Pose): Double? {
+        // Get eye landmarks
+        val leftEye = pose.getPoseLandmark(PoseLandmark.LEFT_EYE)
+        val rightEye = pose.getPoseLandmark(PoseLandmark.RIGHT_EYE)
+        val leftAnkle = pose.getPoseLandmark(PoseLandmark.LEFT_ANKLE)
+        val rightAnkle = pose.getPoseLandmark(PoseLandmark.RIGHT_ANKLE)
+        
+        if (leftEye == null || rightEye == null || leftAnkle == null || rightAnkle == null) {
+            Log.w("JumpDetector", "Missing landmarks for full body height calculation")
+            return null
+        }
+        
+        // Calculate center point of eyes and ankles
+        val eyeCenterY = (leftEye.position.y + rightEye.position.y) / 2
+        val ankleCenterY = (leftAnkle.position.y + rightAnkle.position.y) / 2
+        
+        // Calculate eye-to-ankle pixel distance
+        val fullBodyPixelHeight = (ankleCenterY - eyeCenterY).toDouble()
+        
+        Log.d("JumpDetector", "Full body pixel height: $fullBodyPixelHeight (eyeY: $eyeCenterY, ankleY: $ankleCenterY)")
+        
+        return fullBodyPixelHeight
     }
     
     private fun isFullBodyVisible(pose: Pose): Boolean {
@@ -300,11 +347,25 @@ class JumpDetector @Inject constructor() {
         return allLandmarksVisible
     }
     
+    fun setUserHeight(userHeightCm: Double) {
+        if (fullBodyPixelHeights.isNotEmpty()) {
+            val averagePixelHeight = fullBodyPixelHeights.average()
+            // Eye-to-ankle is approximately 85% of full body height (15cm offset from eye to head top)
+            val eyeToAnkleHeightCm = userHeightCm * 0.85
+            pixelToCmRatio = eyeToAnkleHeightCm / averagePixelHeight
+            Log.i("JumpDetector", "Updated pixel-to-cm ratio with user height: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToAnkle: ${eyeToAnkleHeightCm}cm, avgPixelHeight: $averagePixelHeight)")
+        } else {
+            Log.w("JumpDetector", "Cannot set pixel-to-cm ratio: no full body measurements available")
+        }
+    }
+    
     fun resetCalibration() {
         frameCount = 0
         baselineHeight = 0.0
         isCalibrated = false
         heightHistory.clear()
+        fullBodyPixelHeights.clear()
+        pixelToCmRatio = 1.0
         _jumpData.value = JumpData()
     }
     

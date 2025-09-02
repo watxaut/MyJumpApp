@@ -36,4 +36,8 @@ interface UserDao {
     
     @Query("SELECT * FROM users ORDER BY date_created DESC")
     suspend fun getAllUsers(): List<User>
+    
+    // Additional methods for statistics
+    @Query("SELECT * FROM users WHERE user_id = :userId")
+    fun getUserByIdFlow(userId: String): Flow<User?>
 }

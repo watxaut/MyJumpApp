@@ -80,6 +80,18 @@ class JumpSessionViewModel @Inject constructor(
                 // Auto-start session when calibration completes
                 if (wasCalibrating && !isNowCalibrating && _uiState.value.userId != null && !_uiState.value.isSessionActive) {
                     Log.i("JumpSessionViewModel", "Calibration completed, auto-starting session for user: ${_uiState.value.userId}")
+                    
+                    // Set user height for pixel-to-cm calibration
+                    viewModelScope.launch {
+                        val user = userRepository.getUserById(_uiState.value.userId!!)
+                        if (user != null && user.heightCm != null && user.heightCm > 0) {
+                            jumpDetector.setUserHeight(user.heightCm.toDouble())
+                            Log.i("JumpSessionViewModel", "Set user height for calibration: ${user.heightCm}cm")
+                        } else {
+                            Log.w("JumpSessionViewModel", "User height not available for calibration")
+                        }
+                    }
+                    
                     startSession(_uiState.value.userId!!)
                 }
                 

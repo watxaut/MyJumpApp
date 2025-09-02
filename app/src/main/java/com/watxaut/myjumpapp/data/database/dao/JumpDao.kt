@@ -51,4 +51,11 @@ interface JumpDao {
     
     @Query("DELETE FROM jumps WHERE session_id = :sessionId")
     suspend fun deleteJumpsBySession(sessionId: String)
+    
+    // Additional methods for statistics
+    @Query("SELECT * FROM jumps WHERE user_id = :userId ORDER BY timestamp ASC")
+    suspend fun getAllJumpsByUserId(userId: String): List<Jump>
+    
+    @Query("SELECT * FROM jumps WHERE user_id = :userId ORDER BY timestamp ASC")
+    fun getAllJumpsByUserIdFlow(userId: String): Flow<List<Jump>>
 }
