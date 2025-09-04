@@ -34,6 +34,9 @@ interface JumpDao {
     @Query("SELECT * FROM jumps ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getRecentJumps(limit: Int): List<Jump>
     
+    @Query("SELECT * FROM jumps WHERE user_id = :userId ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecentJumpsByUser(userId: String, limit: Int): List<Jump>
+    
     @Insert
     suspend fun insertJump(jump: Jump)
     

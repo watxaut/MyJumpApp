@@ -45,7 +45,7 @@ class StatisticsRepository @Inject constructor(
         val weekStart = today.minusDays(today.dayOfWeek.value.toLong() - 1)
         
         return DashboardStats(
-            todayStats = calculateDayStats(jumps, today),
+            todayStats = calculateDayStatsFromSessions(sessions, today),
             weekStats = calculateWeekStats(jumps, sessions, weekStart),
             quickStats = calculateQuickStats(jumps, sessions),
             recentSessions = getRecentSessions(sessions, 5)
@@ -176,9 +176,9 @@ class StatisticsRepository @Inject constructor(
         previousJumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         previousSessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): PeriodStats {
-        // Calculate stats from completed sessions (each session = 1 jump)
-        val completedCurrentSessions = currentSessions.filter { it.isCompleted }
-        val completedPreviousSessions = previousSessions.filter { it.isCompleted }
+        // Calculate stats from sessions with valid data (completed or with height data)
+        val completedCurrentSessions = currentSessions.filter { it.isCompleted || it.bestJumpHeight > 0 }
+        val completedPreviousSessions = previousSessions.filter { it.isCompleted || it.bestJumpHeight > 0 }
         
         val currentAvgHeight = if (completedCurrentSessions.isNotEmpty()) {
             completedCurrentSessions.map { it.bestJumpHeight }.average()
@@ -309,23 +309,28 @@ class StatisticsRepository @Inject constructor(
         jumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): PersonalRecords {
-        if (jumps.isEmpty()) {
+        // Use completed sessions for records (each session = 1 jump)
+        val completedSessions = sessions.filter { it.isCompleted }
+        
+        if (completedSessions.isEmpty()) {
             return PersonalRecords(null, null, null, null, null)
         }
 
-        val highestJump = jumps.maxByOrNull { it.heightCm }?.let { jump ->
+        // Highest jump based on sessions (since each session = 1 jump)
+        val highestJump = completedSessions.maxByOrNull { it.bestJumpHeight }?.let { session ->
             JumpRecord(
-                jumpId = jump.jumpId,
-                height = jump.heightCm,
-                flightTime = jump.flightTimeMs,
+                jumpId = session.sessionId, // Use sessionId as jumpId
+                height = session.bestJumpHeight,
+                flightTime = null, // Flight time not tracked in simplified system
                 date = LocalDateTime.ofInstant(
-                    java.time.Instant.ofEpochMilli(jump.timestamp),
+                    java.time.Instant.ofEpochMilli(session.startTime),
                     ZoneId.systemDefault()
                 ),
-                sessionId = jump.sessionId
+                sessionId = session.sessionId
             )
         }
 
+        // For flight time, use jumps if available, otherwise skip
         val longestFlightTime = jumps.filter { it.flightTimeMs != null }
             .maxByOrNull { it.flightTimeMs!! }?.let { jump ->
                 JumpRecord(
@@ -340,35 +345,26 @@ class StatisticsRepository @Inject constructor(
                 )
             }
 
-        val mostJumpsInSession = sessions.maxByOrNull { it.totalJumps }?.let { session ->
-            SessionRecord(
-                sessionId = session.sessionId,
-                value = session.totalJumps.toDouble(),
-                jumpCount = session.totalJumps,
-                date = LocalDateTime.ofInstant(
-                    java.time.Instant.ofEpochMilli(session.startTime),
-                    ZoneId.systemDefault()
-                )
-            )
+        // Most sessions in a day (since each session = 1 jump)
+        val sessionsByDay = completedSessions.groupBy { 
+            LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
         }
-
-        val jumpsByDay = jumps.groupBy { 
-            LocalDate.ofEpochDay(it.timestamp / (24 * 60 * 60 * 1000))
-        }
-        val mostJumpsInDay = jumpsByDay.maxByOrNull { it.value.size }?.let { (date, dayJumps) ->
+        val mostJumpsInDay = sessionsByDay.maxByOrNull { it.value.size }?.let { (date, daySessions) ->
             DayRecord(
                 date = date,
-                jumpCount = dayJumps.size,
-                sessionCount = dayJumps.mapNotNull { it.sessionId }.distinct().size,
-                bestHeight = dayJumps.maxOf { it.heightCm }
+                jumpCount = daySessions.size, // Each session = 1 jump
+                sessionCount = daySessions.size,
+                bestHeight = daySessions.maxOf { it.bestJumpHeight }
             )
         }
 
-        val bestAverageHeightInSession = sessions.maxByOrNull { it.averageJumpHeight }?.let { session ->
+        // Since each session = 1 jump, mostJumpsInSession doesn't make sense in simplified system
+        // Instead, use best session height
+        val bestSession = completedSessions.maxByOrNull { it.bestJumpHeight }?.let { session ->
             SessionRecord(
                 sessionId = session.sessionId,
-                value = session.averageJumpHeight,
-                jumpCount = session.totalJumps,
+                value = session.bestJumpHeight,
+                jumpCount = 1, // Each session = 1 jump
                 date = LocalDateTime.ofInstant(
                     java.time.Instant.ofEpochMilli(session.startTime),
                     ZoneId.systemDefault()
@@ -379,9 +375,9 @@ class StatisticsRepository @Inject constructor(
         return PersonalRecords(
             highestJump = highestJump,
             longestFlightTime = longestFlightTime,
-            mostJumpsInSession = mostJumpsInSession,
+            mostJumpsInSession = bestSession, // Repurposed as best session
             mostJumpsInDay = mostJumpsInDay,
-            bestAverageHeightInSession = bestAverageHeightInSession
+            bestAverageHeightInSession = bestSession // Same as best session since 1 jump per session
         )
     }
 
@@ -389,10 +385,10 @@ class StatisticsRepository @Inject constructor(
         jumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): List<Milestone> {
-        val totalJumps = jumps.size
-        val bestHeight = jumps.maxOfOrNull { it.heightCm } ?: 0.0
-        val totalSessions = sessions.size
-        val totalFlightTime = jumps.mapNotNull { it.flightTimeMs }.sum()
+        // Use completed sessions for accurate data (each session = 1 jump)
+        val completedSessions = sessions.filter { it.isCompleted }
+        val totalJumps = completedSessions.size // Each completed session = 1 jump
+        val bestHeight = completedSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0
 
         val milestones = mutableListOf<Milestone>()
 
@@ -408,11 +404,11 @@ class StatisticsRepository @Inject constructor(
                     currentValue = bestHeight,
                     isAchieved = bestHeight >= target,
                     achievedDate = if (bestHeight >= target) {
-                        jumps.filter { it.heightCm >= target }
-                            .minByOrNull { it.timestamp }
+                        completedSessions.filter { it.bestJumpHeight >= target }
+                            .minByOrNull { it.startTime }
                             ?.let { 
                                 LocalDateTime.ofInstant(
-                                    java.time.Instant.ofEpochMilli(it.timestamp),
+                                    java.time.Instant.ofEpochMilli(it.startTime),
                                     ZoneId.systemDefault()
                                 )
                             }
@@ -422,23 +418,23 @@ class StatisticsRepository @Inject constructor(
             )
         }
 
-        // Volume milestones
-        val volumeTargets = listOf(10, 25, 50, 100, 250, 500, 1000)
+        // Volume milestones (number of completed sessions)
+        val volumeTargets = listOf(1, 5, 10, 25, 50, 100, 250)
         volumeTargets.forEach { target ->
             milestones.add(
                 Milestone(
                     id = "volume_$target",
-                    title = "$target Jumps",
-                    description = "Complete $target total jumps",
+                    title = "$target Sessions",
+                    description = "Complete $target jump sessions",
                     targetValue = target.toDouble(),
                     currentValue = totalJumps.toDouble(),
                     isAchieved = totalJumps >= target,
                     achievedDate = if (totalJumps >= target) {
-                        jumps.sortedBy { it.timestamp }
+                        completedSessions.sortedBy { it.startTime }
                             .getOrNull(target - 1)
                             ?.let { 
                                 LocalDateTime.ofInstant(
-                                    java.time.Instant.ofEpochMilli(it.timestamp),
+                                    java.time.Instant.ofEpochMilli(it.startTime),
                                     ZoneId.systemDefault()
                                 )
                             }
@@ -569,6 +565,26 @@ class StatisticsRepository @Inject constructor(
             sessionCount = sessionIds.size,
             bestJumpHeight = dayJumps.maxOfOrNull { it.heightCm } ?: 0.0,
             totalFlightTime = dayJumps.mapNotNull { it.flightTimeMs }.sum()
+        )
+    }
+    
+    private fun calculateDayStatsFromSessions(
+        sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>,
+        date: LocalDate
+    ): DayStats {
+        val dayStart = date.atStartOfDay(ZoneId.systemDefault()).toEpochSecond() * 1000
+        val dayEnd = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toEpochSecond() * 1000
+        
+        val daySessions = sessions.filter { 
+            it.startTime >= dayStart && it.startTime < dayEnd && it.isCompleted
+        }
+        
+        return DayStats(
+            date = date,
+            jumpCount = daySessions.size, // Each session = 1 jump
+            sessionCount = daySessions.size,
+            bestJumpHeight = daySessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            totalFlightTime = 0L // Flight time not tracked in simplified system
         )
     }
 

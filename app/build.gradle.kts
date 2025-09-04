@@ -17,7 +17,7 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.watxaut.myjumpapp.HiltTestRunner"
         
         // Room schema export directory
         kapt {
@@ -134,6 +134,12 @@ dependencies {
     testImplementation(libs.androidx.arch.core.testing)
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.robolectric)
+    testImplementation("app.cash.turbine:turbine:1.0.0") // Flow testing
+    testImplementation("com.google.truth:truth:1.4.2") // Better assertions
+    testImplementation("com.google.dagger:hilt-android-testing:2.48") // Hilt testing
+    testImplementation("org.mockito:mockito-inline:5.2.0") // Inline mocking
+    
+    kaptTest("com.google.dagger:hilt-android-compiler:2.48") // Hilt compiler for tests
 
     // Android Instrumented Testing
     androidTestImplementation(libs.androidx.junit)
@@ -141,6 +147,12 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
     androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation("app.cash.turbine:turbine:1.0.0") // Flow testing
+    androidTestImplementation("com.google.truth:truth:1.4.2") // Better assertions
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.48") // Hilt testing
+    androidTestImplementation("androidx.test:core:1.5.0") // Test core utilities
+    
+    kaptAndroidTest("com.google.dagger:hilt-android-compiler:2.48") // Hilt compiler for tests
 
     // Debug Tools
     debugImplementation(libs.androidx.ui.tooling)

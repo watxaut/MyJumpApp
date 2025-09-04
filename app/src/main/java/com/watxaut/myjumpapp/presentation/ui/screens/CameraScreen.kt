@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -188,10 +189,10 @@ private fun JumpDetectionContent(
                         MaxHeightDisplay(uiState.maxHeight)
                     }
                     
-                    // Debug info display
-                    if (!uiState.isCalibrating) {
+                    // Position warning
+                    uiState.debugInfo.positionWarning?.let { warning ->
                         Spacer(modifier = Modifier.height(8.dp))
-                        DebugInfoDisplay(uiState.debugInfo)
+                        PositionWarning(warning)
                     }
                     
                     if (uiState.isSessionActive) {
@@ -409,218 +410,45 @@ private fun CalibrationStatus(debugInfo: DebugInfo) {
             }
         }
         
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        // Live debug info during calibration
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                DebugItem(
-                    label = "Person Height",
-                    value = "${String.format("%.0f", debugInfo.currentHeight)}px",
-                    color = MaterialTheme.colorScheme.primary
-                )
-                
-                DebugItem(
-                    label = "Body",
-                    value = if (debugInfo.poseDetected) "✓ Detected" else "✗ Not found",
-                    color = if (debugInfo.poseDetected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                )
-                
-                DebugItem(
-                    label = "Landmarks",
-                    value = "${debugInfo.landmarksDetected}",
-                    color = if (debugInfo.landmarksDetected >= 10) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
-                )
-                
-                DebugItem(
-                    label = "Confidence",
-                    value = "${String.format("%.0f", debugInfo.confidenceScore * 100)}%",
-                    color = if (debugInfo.confidenceScore > 0.5f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
-                )
-            }
-            
-            // Additional debug info
-            if (debugInfo.totalBodyHeightPixels > 0) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    DebugItem(
-                        label = "Body Height",
-                        value = "${String.format("%.0f", debugInfo.totalBodyHeightPixels)}px",
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    
-                    DebugItem(
-                        label = "Pixel Ratio",
-                        value = "${String.format("%.2f", debugInfo.pixelToCmRatio)}",
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    
-                    if (debugInfo.userHeightCm > 0) {
-                        DebugItem(
-                            label = "User Height",
-                            value = "${String.format("%.0f", debugInfo.userHeightCm)}cm",
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 
+
+
 @Composable
-private fun DebugInfoDisplay(debugInfo: DebugInfo) {
+private fun PositionWarning(warning: String) {
     Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+            containerColor = MaterialTheme.colorScheme.errorContainer
         ),
-        shape = RoundedCornerShape(8.dp)
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, 
+            MaterialTheme.colorScheme.error
+        )
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Detection Status",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = "Position Warning",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(20.dp)
             )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // First row - Hip measurements
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                DebugItem(
-                    label = "Hip Height",
-                    value = "${String.format("%+.1f", debugInfo.hipHeightCm)}cm",
-                    color = if (Math.abs(debugInfo.hipHeightCm) > 5.0) 
-                        MaterialTheme.colorScheme.secondary 
-                    else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-                
-                DebugItem(
-                    label = "Hip Y (Current)",
-                    value = "${String.format("%.0f", debugInfo.currentHipYPixels)}px",
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-                
-                DebugItem(
-                    label = "Hip Y (Baseline)",
-                    value = "${String.format("%.0f", debugInfo.baselineHipYPixels)}px",
-                    color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            // Second row - Movement and ratios
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                DebugItem(
-                    label = "Hip Movement",
-                    value = "${String.format("%.0f", debugInfo.hipMovementPixels)}px",
-                    color = if (debugInfo.hipMovementPixels > 10) 
-                        MaterialTheme.colorScheme.secondary 
-                    else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-                
-                DebugItem(
-                    label = "Body Height",
-                    value = "${String.format("%.0f", debugInfo.totalBodyHeightPixels)}px",
-                    color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.weight(1f)
-                )
-                
-                DebugItem(
-                    label = "Pixel Ratio",
-                    value = "${String.format("%.2f", debugInfo.pixelToCmRatio)}",
-                    color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            // Third row - Confidence and quality metrics
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                DebugItem(
-                    label = "Confidence",
-                    value = "${String.format("%.0f", debugInfo.confidenceScore * 100)}%",
-                    color = if (debugInfo.confidenceScore > 0.9f) 
-                        Color.Green 
-                    else if (debugInfo.confidenceScore > 0.7f) 
-                        Color(0xFFFF9800) 
-                    else Color.Red,
-                    modifier = Modifier.weight(1f)
-                )
-                
-                DebugItem(
-                    label = "Landmarks",
-                    value = "${debugInfo.landmarksDetected}",
-                    color = if (debugInfo.landmarksDetected >= 30) 
-                        Color.Green 
-                    else Color(0xFFFF9800),
-                    modifier = Modifier.weight(1f)
-                )
-                
-                if (debugInfo.userHeightCm > 0) {
-                    DebugItem(
-                        label = "User Height",
-                        value = "${String.format("%.0f", debugInfo.userHeightCm)}cm",
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = warning,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                fontWeight = FontWeight.Medium
+            )
         }
-    }
-}
-
-@Composable
-private fun DebugItem(
-    label: String,
-    value: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = color,
-            textAlign = TextAlign.Center
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
     }
 }

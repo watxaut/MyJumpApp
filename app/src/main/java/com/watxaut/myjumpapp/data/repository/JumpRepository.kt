@@ -62,4 +62,8 @@ class JumpRepository @Inject constructor(
     suspend fun getRecentJumps(limit: Int = 10): List<Jump> {
         return jumpDao.getRecentJumps(limit)
     }
+    
+    suspend fun getRecentJumpsByUser(userId: String, limit: Int = 5): List<Jump> {
+        return jumpDao.getRecentJumpsByUser(userId, limit)
+    }
 }

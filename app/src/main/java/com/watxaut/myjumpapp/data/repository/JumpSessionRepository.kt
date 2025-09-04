@@ -16,6 +16,10 @@ class JumpSessionRepository @Inject constructor(
         return jumpSessionDao.getSessionsByUser(userId)
     }
     
+    suspend fun getSessionsByUserIdList(userId: String): List<JumpSession> {
+        return jumpSessionDao.getSessionsByUserId(userId)
+    }
+    
     suspend fun getSessionById(sessionId: String): JumpSession? {
         return jumpSessionDao.getSessionById(sessionId)
     }

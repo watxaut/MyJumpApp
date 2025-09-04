@@ -6,6 +6,7 @@ import com.google.mlkit.vision.pose.PoseLandmark
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.*
@@ -37,7 +38,8 @@ data class DebugInfo(
     val totalBodyHeightPixels: Double = 0.0,
     val pixelToCmRatio: Double = 1.0,
     val userHeightCm: Double = 0.0,
-    val eyeToAnkleHeightCm: Double = 0.0
+    val eyeToAnkleHeightCm: Double = 0.0,
+    val positionWarning: String? = null
 )
 
 
@@ -47,32 +49,46 @@ class JumpDetector @Inject constructor() {
     private val _jumpData = MutableStateFlow(JumpData())
     val jumpData: StateFlow<JumpData> = _jumpData.asStateFlow()
     
+    @Volatile
     private var baselineHeight: Double = 0.0
+    @Volatile
     private var baselineDepth: Double = 0.0
+    @Volatile
     private var maxHeightReached: Double = 0.0
+@Volatile
     private var frameCount = 0
     private var calibrationFrames = 60 // Frames to establish baseline
-    private var heightHistory = mutableListOf<Double>()
-    private var fullBodyPixelHeights = mutableListOf<Double>() // For pixel-to-cm ratio calculation
+    
+    // Bounded collections to prevent memory leaks
+    private val maxHeightHistorySize = 10 // Reduced for better responsiveness
+    private val maxFullBodyPixelHeightsSize = 30 // Only need samples during calibration
+    private var heightHistory = Collections.synchronizedList(mutableListOf<Double>())
+    private var fullBodyPixelHeights = Collections.synchronizedList(mutableListOf<Double>()) // For pixel-to-cm ratio calculation
+    @Volatile
     private var pixelToCmRatio: Double = 1.0 // Pixels per cm
+    @Volatile
     private var isCalibrated = false
+    @Volatile
     private var userHeightCm: Double = 0.0
     
     // Movement stability detection
+    @Volatile
     private var isStable = false
+    @Volatile
     private var stabilityStartTime: Long = 0
     private val stabilityRequiredMs = 2000L // 2 seconds of stability required
-    private val movementHistory = mutableListOf<Pair<Double, Double>>() // (hipY, hipZ) pairs
+    private val movementHistory = Collections.synchronizedList(mutableListOf<Pair<Double, Double>>()) // (hipY, hipZ) pairs
     private val stabilityThreshold = 15.0 // pixels
     private val maxMovementHistorySize = 60 // ~2 seconds at 30fps
     
     // Anti-false-positive measures
-    private var depthHistory = mutableListOf<Double>()
+    private val depthHistory = Collections.synchronizedList(mutableListOf<Double>())
     private val depthThreshold = 50.0 // pixels - max allowed depth variation
     private val maxDepthHistorySize = 30
+    @Volatile
     private var averageDepth: Double = 0.0
     
-    private val smoothingWindowSize = 5 // Reduced for better responsiveness
+    // Removed smoothingWindowSize - now using maxHeightHistorySize for bounds
     
     fun processPose(pose: Pose) {
         val poseDetected = pose.allPoseLandmarks.isNotEmpty()
@@ -118,6 +134,11 @@ class JumpDetector @Inject constructor() {
         
         val eyeToAnkleHeightCm = if (userHeightCm > 0) userHeightCm * 0.85 else 0.0
         
+        // Check for position warnings if calibrated (without affecting tracking)
+        val positionWarning = if (isCalibrated && currentHipY != null) {
+            checkForPositionWarning(currentDepth)
+        } else null
+        
         val debugInfo = DebugInfo(
             poseDetected = poseDetected,
             isStable = stabilityStatus,
@@ -140,7 +161,8 @@ class JumpDetector @Inject constructor() {
             totalBodyHeightPixels = totalBodyHeightPixels,
             pixelToCmRatio = pixelToCmRatio,
             userHeightCm = userHeightCm,
-            eyeToAnkleHeightCm = eyeToAnkleHeightCm
+            eyeToAnkleHeightCm = eyeToAnkleHeightCm,
+            positionWarning = positionWarning
         )
         
         // Update debug info immediately
@@ -156,10 +178,10 @@ class JumpDetector @Inject constructor() {
             return
         }
         
-        // Smooth the hip Y measurement
+        // Smooth the hip Y measurement with bounded collection
         heightHistory.add(currentHipY)
-        if (heightHistory.size > smoothingWindowSize) {
-            heightHistory.removeAt(0)
+        while (heightHistory.size > maxHeightHistorySize) {
+            heightHistory.removeFirst()
         }
         
         val smoothedHipY = heightHistory.average()
@@ -173,7 +195,8 @@ class JumpDetector @Inject constructor() {
         }
         
         // Anti-false-positive filtering for calibrated state
-        if (!isValidJumpMovement(smoothedHipY, currentDepth)) {
+        val (isValidMovement, _) = isValidJumpMovement(smoothedHipY, currentDepth)
+        if (!isValidMovement) {
             Log.d("JumpDetector", "Invalid movement detected - ignoring frame")
             return
         }
@@ -205,6 +228,10 @@ class JumpDetector @Inject constructor() {
                 val fullBodyPixelHeight = calculateFullBodyPixelHeight(pose)
                 if (fullBodyPixelHeight != null) {
                     fullBodyPixelHeights.add(fullBodyPixelHeight)
+                    // Keep only the most recent measurements to prevent unbounded growth
+                    while (fullBodyPixelHeights.size > maxFullBodyPixelHeightsSize) {
+                        fullBodyPixelHeights.removeFirst()
+                    }
                     Log.d("JumpDetector", "Collected full body pixel height: $fullBodyPixelHeight (frame $frameCount)")
                 }
             }
@@ -411,10 +438,10 @@ class JumpDetector @Inject constructor() {
         
         val currentTime = System.currentTimeMillis()
         
-        // Add current position to history
+        // Add current position to history with bounds check
         movementHistory.add(Pair(hipY, hipZ))
-        if (movementHistory.size > maxMovementHistorySize) {
-            movementHistory.removeAt(0)
+        while (movementHistory.size > maxMovementHistorySize) {
+            movementHistory.removeFirst()
         }
         
         // Need at least 30 frames (~1 second) to assess stability
@@ -463,12 +490,13 @@ class JumpDetector @Inject constructor() {
      * 1. Person moving horizontally toward/away from camera
      * 2. Person bending/crouching while approaching
      * 3. Camera/phone movement
+     * Returns (isValid, warningMessage)
      */
-    private fun isValidJumpMovement(hipY: Double, hipZ: Double): Boolean {
+    private fun isValidJumpMovement(hipY: Double, hipZ: Double): Pair<Boolean, String?> {
         // Method 1: Depth filtering - ensure person maintains roughly same distance from camera
         depthHistory.add(hipZ)
-        if (depthHistory.size > maxDepthHistorySize) {
-            depthHistory.removeAt(0)
+        while (depthHistory.size > maxDepthHistorySize) {
+            depthHistory.removeFirst()
         }
         
         if (depthHistory.size >= 10) {
@@ -477,7 +505,7 @@ class JumpDetector @Inject constructor() {
             
             if (depthVariation > depthThreshold) {
                 Log.d("JumpDetector", "Depth variation too high: ${String.format("%.1f", depthVariation)} > $depthThreshold - person likely approaching/moving away")
-                return false
+                return Pair(false, "Move back to original position")
             }
         }
         
@@ -485,7 +513,7 @@ class JumpDetector @Inject constructor() {
         val depthDifference = abs(hipZ - baselineDepth)
         if (depthDifference > depthThreshold) {
             Log.d("JumpDetector", "Depth changed significantly from baseline: ${String.format("%.1f", depthDifference)} > $depthThreshold")
-            return false
+            return Pair(false, "Return to original position for accurate tracking")
         }
         
         // Method 3: Average Z position filtering - use running average to filter out approach movements
@@ -493,14 +521,33 @@ class JumpDetector @Inject constructor() {
             val avgDepthDifference = abs(hipZ - averageDepth)
             if (avgDepthDifference > depthThreshold * 0.7) { // Slightly more lenient than individual frame
                 Log.d("JumpDetector", "Average depth difference too high: ${String.format("%.1f", avgDepthDifference)} > ${depthThreshold * 0.7}")
-                return false
+                return Pair(false, "Step back to your starting position")
             }
         }
         
         // All checks passed - this appears to be valid vertical movement
-        return true
+        return Pair(true, null)
     }
     
+    /**
+     * Check for position warnings without affecting the tracking logic.
+     * Warns at 70% of the threshold to give early notice.
+     */
+    private fun checkForPositionWarning(hipZ: Double): String? {
+        if (baselineDepth == 0.0) return null
+        
+        val depthDifference = abs(hipZ - baselineDepth)
+        val warningThreshold = depthThreshold * 0.7 // Warn at 70% of cutoff (35 pixels)
+        
+        return when {
+            depthDifference > warningThreshold -> {
+                val direction = if (hipZ < baselineDepth) "closer" else "farther away"
+                "You've moved $direction from your starting position. Return to original spot for accurate tracking."
+            }
+            else -> null
+        }
+    }
+
     fun getLastJumpData(): JumpData {
         return _jumpData.value
     }

@@ -85,31 +85,64 @@ fun StatisticsScreen(
                     .padding(paddingValues)
             ) {
                 // Tab Row
-                TabRow(selectedTabIndex = selectedTab) {
+                ScrollableTabRow(
+                    selectedTabIndex = selectedTab,
+                    edgePadding = 0.dp
+                ) {
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("Overview") }
+                        text = { 
+                            Text(
+                                text = "Overview",
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelMedium
+                            ) 
+                        }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("Progress") }
+                        text = { 
+                            Text(
+                                text = "Progress",
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelMedium
+                            ) 
+                        }
                     )
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        text = { Text("Records") }
+                        text = { 
+                            Text(
+                                text = "Records",
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelMedium
+                            ) 
+                        }
                     )
                     Tab(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
-                        text = { Text("Surfaces") }
+                        text = { 
+                            Text(
+                                text = "Surfaces",
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelMedium
+                            ) 
+                        }
                     )
                     Tab(
                         selected = selectedTab == 4,
                         onClick = { selectedTab = 4 },
-                        text = { Text("Achievements") }
+                        text = { 
+                            Text(
+                                text = "Achievements",
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelMedium
+                            ) 
+                        }
                     )
                 }
 
@@ -230,7 +263,7 @@ private fun OverviewTab(
                 ) {
                     RecentStatsRow(
                         label = "Last 7 Days",
-                        jumpCount = statistics.recentStats.last7Days.jumpCount,
+                        sessionCount = statistics.recentStats.last7Days.sessionCount,
                         bestHeight = statistics.recentStats.last7Days.bestJumpHeight,
                         improvement = statistics.recentStats.last7Days.improvement
                     )
@@ -239,7 +272,7 @@ private fun OverviewTab(
                     
                     RecentStatsRow(
                         label = "Last 30 Days",
-                        jumpCount = statistics.recentStats.last30Days.jumpCount,
+                        sessionCount = statistics.recentStats.last30Days.sessionCount,
                         bestHeight = statistics.recentStats.last30Days.bestJumpHeight,
                         improvement = statistics.recentStats.last30Days.improvement
                     )
@@ -373,46 +406,67 @@ private fun RecordsTab(
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
-                    statistics.achievementStats.personalRecords.highestJump?.let { record ->
-                        PersonalRecordItem(
-                            title = "Highest Jump",
-                            value = "${String.format("%.1f", record.height)}cm",
-                            date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                            icon = Icons.Default.KeyboardArrowUp
-                        )
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
+                    val hasAnyRecords = statistics.achievementStats.personalRecords.highestJump != null ||
+                            statistics.achievementStats.personalRecords.longestFlightTime != null ||
+                            statistics.achievementStats.personalRecords.mostJumpsInDay != null
                     
-                    statistics.achievementStats.personalRecords.longestFlightTime?.let { record ->
-                        PersonalRecordItem(
-                            title = "Longest Flight Time",
-                            value = "${record.flightTime ?: 0}ms",
-                            date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                            icon = Icons.Default.Phone
-                        )
+                    if (hasAnyRecords) {
+                        statistics.achievementStats.personalRecords.highestJump?.let { record ->
+                            PersonalRecordItem(
+                                title = "Highest Jump",
+                                value = "${String.format("%.1f", record.height)}cm",
+                                date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                                icon = Icons.Default.KeyboardArrowUp
+                            )
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                         
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-                    
-                    statistics.achievementStats.personalRecords.mostJumpsInSession?.let { record ->
-                        PersonalRecordItem(
-                            title = "Most Jumps in Session",
-                            value = "${record.jumpCount} jumps",
-                            date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                            icon = Icons.Default.Person
-                        )
+                        statistics.achievementStats.personalRecords.longestFlightTime?.let { record ->
+                            PersonalRecordItem(
+                                title = "Longest Flight Time",
+                                value = "${record.flightTime ?: 0}ms",
+                                date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                                icon = Icons.Default.Phone
+                            )
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                         
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-                    
-                    statistics.achievementStats.personalRecords.mostJumpsInDay?.let { record ->
-                        PersonalRecordItem(
-                            title = "Most Jumps in Day",
-                            value = "${record.jumpCount} jumps",
-                            date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                            icon = Icons.Default.DateRange
-                        )
+                        // Removed "Most Jumps in Session" and "Most Jumps in Day" since each session = 1 jump
+                        statistics.achievementStats.personalRecords.mostJumpsInDay?.let { record ->
+                            PersonalRecordItem(
+                                title = "Most Sessions in Day",
+                                value = "${record.jumpCount} sessions",
+                                date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                                icon = Icons.Default.DateRange
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "No records yet",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "Complete your first jump session to see your personal records!",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
@@ -538,8 +592,11 @@ private fun QuickStatCard(
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = icon,
@@ -552,7 +609,8 @@ private fun QuickStatCard(
                 text = value,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center
             )
             Text(
                 text = title,
@@ -567,40 +625,69 @@ private fun QuickStatCard(
 @Composable
 private fun TodayStatsCard(todayStats: DayStats) {
     Card {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+        if (todayStats.jumpCount > 0) {
+            Column(
+                modifier = Modifier.padding(16.dp)
             ) {
-                Column {
-                    Text(
-                        text = "${todayStats.jumpCount}",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Jumps Today",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "${todayStats.jumpCount}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Sessions Today",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "${String.format("%.1f", todayStats.bestJumpHeight)}cm",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        Text(
+                            text = "Best Today",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "${String.format("%.1f", todayStats.bestJumpHeight)}cm",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Text(
-                        text = "Best Today",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DateRange,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "No activity today",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Start jumping to see your daily progress!",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
@@ -609,7 +696,7 @@ private fun TodayStatsCard(todayStats: DayStats) {
 @Composable
 private fun RecentStatsRow(
     label: String,
-    jumpCount: Int,
+    sessionCount: Int,
     bestHeight: Double,
     improvement: Double
 ) {
@@ -648,19 +735,28 @@ private fun RecentStatsRow(
         
         Spacer(modifier = Modifier.height(4.dp))
         
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        if (sessionCount > 0) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "$sessionCount sessions",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${String.format("%.1f", bestHeight)}cm best",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
             Text(
-                text = "$jumpCount jumps",
+                text = "No activity in this period",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "${String.format("%.1f", bestHeight)}cm best",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -756,7 +852,7 @@ private fun PeriodStatsCard(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Total Jumps",
+                        text = "Total Sessions",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
