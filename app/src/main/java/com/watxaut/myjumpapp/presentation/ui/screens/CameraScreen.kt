@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
@@ -87,7 +87,7 @@ fun CameraScreen(
                         onNavigateBack() 
                     }) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -269,10 +269,12 @@ private fun JumpDetectionContent(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             CircularProgressIndicator(
-                                progress = if (uiState.debugInfo.isStable) {
-                                    uiState.debugInfo.calibrationProgress.toFloat() / uiState.debugInfo.calibrationFramesNeeded.toFloat()
-                                } else {
-                                    uiState.debugInfo.stabilityProgress
+                                progress = {
+                                    if (uiState.debugInfo.isStable) {
+                                        uiState.debugInfo.calibrationProgress.toFloat() / uiState.debugInfo.calibrationFramesNeeded.toFloat()
+                                    } else {
+                                        uiState.debugInfo.stabilityProgress
+                                    }
                                 },
                                 modifier = Modifier.size(48.dp),
                                 strokeWidth = 4.dp,
@@ -464,10 +466,12 @@ private fun CalibrationStatus(debugInfo: DebugInfo) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             CircularProgressIndicator(
-                progress = if (debugInfo.isStable) {
-                    debugInfo.calibrationProgress.toFloat() / debugInfo.calibrationFramesNeeded.toFloat()
-                } else {
-                    debugInfo.stabilityProgress
+                progress = {
+                    if (debugInfo.isStable) {
+                        debugInfo.calibrationProgress.toFloat() / debugInfo.calibrationFramesNeeded.toFloat()
+                    } else {
+                        debugInfo.stabilityProgress
+                    }
                 },
                 modifier = Modifier.size(20.dp),
                 strokeWidth = 2.dp,

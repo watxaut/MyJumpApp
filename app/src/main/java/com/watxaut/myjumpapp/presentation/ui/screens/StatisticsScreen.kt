@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,7 +48,7 @@ fun StatisticsScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -157,7 +158,8 @@ fun StatisticsScreen(
                         viewModel = viewModel
                     )
                     2 -> RecordsTab(
-                        statistics = uiState.userStatistics!!
+                        statistics = uiState.userStatistics!!,
+                        viewModel = viewModel
                     )
                     3 -> SurfacesTab(
                         statistics = uiState.userStatistics!!
@@ -318,8 +320,11 @@ private fun ProgressTab(
 
         // Height Progress Chart
         item {
-            val heightData = viewModel.getFilteredProgressData()
-            if (heightData != null && heightData.isNotEmpty()) {
+            val heightData by remember(uiState.selectedTimePeriod, uiState.userStatistics) {
+                derivedStateOf { viewModel.getFilteredProgressData() }
+            }
+            val heightDataValue = heightData
+            if (heightDataValue != null && heightDataValue.isNotEmpty()) {
                 Text(
                     text = "Height Progress",
                     style = MaterialTheme.typography.titleMedium,
@@ -332,14 +337,14 @@ private fun ProgressTab(
                         modifier = Modifier.padding(16.dp)
                     ) {
                         Text(
-                            text = "Average jump height over time",
+                            text = "Height over time",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         // Simple chart representation (you can replace with actual chart library)
-                        SimpleHeightChart(heightData)
+                        SimpleHeightChart(heightDataValue)
                     }
                 }
             }
@@ -347,8 +352,11 @@ private fun ProgressTab(
 
         // Volume Progress
         item {
-            val volumeData = viewModel.getFilteredVolumeData()
-            if (volumeData != null && volumeData.isNotEmpty()) {
+            val volumeData by remember(uiState.selectedTimePeriod, uiState.userStatistics) {
+                derivedStateOf { viewModel.getFilteredVolumeData() }
+            }
+            val volumeDataValue = volumeData
+            if (volumeDataValue != null && volumeDataValue.isNotEmpty()) {
                 Text(
                     text = "Volume Progress",
                     style = MaterialTheme.typography.titleMedium,
@@ -367,7 +375,7 @@ private fun ProgressTab(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        SimpleVolumeChart(volumeData)
+                        SimpleVolumeChart(volumeDataValue)
                     }
                 }
             }
@@ -375,9 +383,12 @@ private fun ProgressTab(
 
         // Period Stats
         item {
-            val periodStats = viewModel.getPeriodStats()
-            if (periodStats != null) {
-                PeriodStatsCard(periodStats, uiState.selectedTimePeriod)
+            val periodStats by remember(uiState.selectedTimePeriod, uiState.userStatistics) {
+                derivedStateOf { viewModel.getPeriodStats() }
+            }
+            val periodStatsValue = periodStats
+            if (periodStatsValue != null) {
+                PeriodStatsCard(periodStatsValue, uiState.selectedTimePeriod)
             }
         }
     }
@@ -385,8 +396,10 @@ private fun ProgressTab(
 
 @Composable
 private fun RecordsTab(
-    statistics: UserStatistics
+    statistics: UserStatistics,
+    viewModel: StatisticsViewModel
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -406,12 +419,13 @@ private fun RecordsTab(
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
-                    val hasAnyRecords = statistics.achievementStats.personalRecords.highestJump != null ||
-                            statistics.achievementStats.personalRecords.longestFlightTime != null ||
-                            statistics.achievementStats.personalRecords.mostJumpsInDay != null
+                    val currentStatistics = uiState.userStatistics ?: statistics
+                    val hasAnyRecords = currentStatistics.achievementStats.personalRecords.highestJump != null ||
+                            currentStatistics.achievementStats.personalRecords.longestFlightTime != null ||
+                            currentStatistics.achievementStats.personalRecords.mostJumpsInDay != null
                     
                     if (hasAnyRecords) {
-                        statistics.achievementStats.personalRecords.highestJump?.let { record ->
+                        currentStatistics.achievementStats.personalRecords.highestJump?.let { record ->
                             PersonalRecordItem(
                                 title = "Highest Jump",
                                 value = "${String.format("%.1f", record.height)}cm",
@@ -422,7 +436,7 @@ private fun RecordsTab(
                             Spacer(modifier = Modifier.height(12.dp))
                         }
                         
-                        statistics.achievementStats.personalRecords.longestFlightTime?.let { record ->
+                        currentStatistics.achievementStats.personalRecords.longestFlightTime?.let { record ->
                             PersonalRecordItem(
                                 title = "Longest Flight Time",
                                 value = "${record.flightTime ?: 0}ms",
@@ -434,7 +448,7 @@ private fun RecordsTab(
                         }
                         
                         // Removed "Most Jumps in Session" and "Most Jumps in Day" since each session = 1 jump
-                        statistics.achievementStats.personalRecords.mostJumpsInDay?.let { record ->
+                        currentStatistics.achievementStats.personalRecords.mostJumpsInDay?.let { record ->
                             PersonalRecordItem(
                                 title = "Most Sessions in Day",
                                 value = "${record.jumpCount} sessions",
@@ -485,9 +499,10 @@ private fun RecordsTab(
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
+                    val currentStatistics = uiState.userStatistics ?: statistics
                     StreakItem(
                         title = "Current Streak",
-                        value = "${statistics.achievementStats.streaks.currentStreak} days",
+                        value = "${currentStatistics.achievementStats.streaks.currentStreak} days",
                         icon = Icons.Default.Favorite
                     )
                     
@@ -495,7 +510,7 @@ private fun RecordsTab(
                     
                     StreakItem(
                         title = "Longest Streak",
-                        value = "${statistics.achievementStats.streaks.longestStreak} days",
+                        value = "${currentStatistics.achievementStats.streaks.longestStreak} days",
                         icon = Icons.Default.Star
                     )
                 }
@@ -764,61 +779,154 @@ private fun RecentStatsRow(
 
 @Composable
 private fun SimpleHeightChart(data: List<HeightDataPoint>) {
-    // Simple visual representation - you can replace with actual chart library
-    val maxHeight = data.maxOfOrNull { it.bestHeight } ?: 0.0
+    val chartData = data.takeLast(7)
+    val maxHeight = chartData.maxOfOrNull { it.bestHeight } ?: 0.0
     
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        data.takeLast(7).forEach { dataPoint ->
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
+    if (maxHeight > 0.0) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Chart area with bars that start from bottom
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
             ) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .width(16.dp)
-                        .height(((dataPoint.averageHeight / maxHeight) * 80).dp)
-                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${dataPoint.date.dayOfMonth}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    chartData.forEach { dataPoint ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // Value label above bar
+                            Text(
+                                text = "${String.format("%.1f", dataPoint.averageHeight)}cm",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            // Bar
+                            Box(
+                                modifier = Modifier
+                                    .width(20.dp)
+                                    .height(((dataPoint.averageHeight / maxHeight) * 80).dp)
+                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                    }
+                }
             }
+            
+            // Date labels
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                chartData.forEach { dataPoint ->
+                    Text(
+                        text = "${dataPoint.date.dayOfMonth}/${dataPoint.date.monthValue}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    } else {
+        // Empty state
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "No data available",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 @Composable
 private fun SimpleVolumeChart(data: List<VolumeDataPoint>) {
-    val maxJumps = data.maxOfOrNull { it.jumpCount } ?: 0
+    val chartData = data.takeLast(7)
+    val maxJumps = chartData.maxOfOrNull { it.jumpCount } ?: 0
     
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        data.takeLast(7).forEach { dataPoint ->
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
+    if (maxJumps > 0) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Chart area with bars that start from bottom
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
             ) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .width(16.dp)
-                        .height(((dataPoint.jumpCount.toDouble() / maxJumps) * 80).dp)
-                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                        .background(MaterialTheme.colorScheme.secondary)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${dataPoint.date.dayOfMonth}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    chartData.forEach { dataPoint ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // Value label above bar
+                            Text(
+                                text = "${dataPoint.jumpCount}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            // Bar
+                            Box(
+                                modifier = Modifier
+                                    .width(20.dp)
+                                    .height(((dataPoint.jumpCount.toDouble() / maxJumps) * 80).dp)
+                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                    .background(MaterialTheme.colorScheme.secondary)
+                            )
+                        }
+                    }
+                }
             }
+            
+            // Date labels
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                chartData.forEach { dataPoint ->
+                    Text(
+                        text = "${dataPoint.date.dayOfMonth}/${dataPoint.date.monthValue}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    } else {
+        // Empty state
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "No data available",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
