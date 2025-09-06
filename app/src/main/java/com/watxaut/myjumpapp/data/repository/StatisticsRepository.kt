@@ -29,8 +29,8 @@ class StatisticsRepository @Inject constructor(
         return UserStatistics(
             userId = userId,
             userName = user.userName,
-            overallStats = calculateOverallStats(jumps, sessions),
-            recentStats = calculateRecentStats(jumps, sessions),
+            overallStats = calculateOverallStats(user, jumps, sessions),
+            recentStats = calculateRecentStats(user, jumps, sessions),
             progressStats = calculateProgressStats(jumps, sessions),
             achievementStats = calculateAchievementStats(jumps, sessions),
             surfaceStats = calculateSurfaceStats(user, sessions)
@@ -62,8 +62,8 @@ class StatisticsRepository @Inject constructor(
                 UserStatistics(
                     userId = userId,
                     userName = it.userName,
-                    overallStats = calculateOverallStats(jumps, sessions),
-                    recentStats = calculateRecentStats(jumps, sessions),
+                    overallStats = calculateOverallStats(it, jumps, sessions),
+                    recentStats = calculateRecentStats(it, jumps, sessions),
                     progressStats = calculateProgressStats(jumps, sessions),
                     achievementStats = calculateAchievementStats(jumps, sessions),
                     surfaceStats = calculateSurfaceStats(it, sessions)
@@ -73,6 +73,7 @@ class StatisticsRepository @Inject constructor(
     }
 
     private fun calculateOverallStats(
+        user: com.watxaut.myjumpapp.data.database.entities.User,
         jumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): OverallStats {
@@ -85,6 +86,8 @@ class StatisticsRepository @Inject constructor(
                 totalSessions = sessions.size,
                 bestJumpHeight = 0.0,
                 averageJumpHeight = 0.0,
+                bestSpikeReach = 0.0,
+                averageSpikeReach = 0.0,
                 totalFlightTime = 0L,
                 averageFlightTime = 0L,
                 firstJumpDate = null,
@@ -97,12 +100,20 @@ class StatisticsRepository @Inject constructor(
             LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000)) 
         }.distinct().size
 
+        val heelToHandReach = user.heelToHandReachCm ?: 0.0
+        
         return OverallStats(
             totalJumps = completedSessions.size, // Each completed session = 1 jump
             totalSessions = sessions.size,
             bestJumpHeight = completedSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
             averageJumpHeight = if (completedSessions.isNotEmpty()) {
                 completedSessions.map { it.bestJumpHeight }.average()
+            } else 0.0,
+            bestSpikeReach = if (heelToHandReach > 0) {
+                (completedSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0) + heelToHandReach
+            } else 0.0,
+            averageSpikeReach = if (completedSessions.isNotEmpty() && heelToHandReach > 0) {
+                completedSessions.map { it.bestJumpHeight }.average() + heelToHandReach
             } else 0.0,
             totalFlightTime = 0L, // Flight time not tracked in simplified system
             averageFlightTime = 0L,
@@ -123,6 +134,7 @@ class StatisticsRepository @Inject constructor(
     }
 
     private fun calculateRecentStats(
+        user: com.watxaut.myjumpapp.data.database.entities.User,
         jumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): RecentStats {
@@ -138,42 +150,37 @@ class StatisticsRepository @Inject constructor(
 
         return RecentStats(
             last7Days = calculatePeriodStats(
-                emptyList(), // No longer using jumps
+                user,
                 sessions.filter { it.startTime >= sevenDaysAgo },
-                emptyList(),
                 sessions.filter { it.startTime >= fourteenDaysAgo && it.startTime < sevenDaysAgo }
             ),
             last30Days = calculatePeriodStats(
-                emptyList(),
+                user,
                 sessions.filter { it.startTime >= thirtyDaysAgo },
-                emptyList(),
                 sessions.filter { it.startTime >= sixtyDaysAgo && it.startTime < thirtyDaysAgo }
             ),
             thisWeek = calculatePeriodStats(
-                emptyList(),
+                user,
                 sessions.filter {
                     val sessionDate = LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
                     !sessionDate.isBefore(weekStart)
                 },
-                emptyList(),
                 emptyList()
             ),
             thisMonth = calculatePeriodStats(
-                emptyList(),
+                user,
                 sessions.filter {
                     val sessionDate = LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
                     !sessionDate.isBefore(monthStart)
                 },
-                emptyList(),
                 emptyList()
             )
         )
     }
 
     private fun calculatePeriodStats(
-        currentJumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
+        user: com.watxaut.myjumpapp.data.database.entities.User,
         currentSessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>,
-        previousJumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         previousSessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): PeriodStats {
         // Calculate stats from sessions with valid data (completed or with height data)
@@ -193,14 +200,34 @@ class StatisticsRepository @Inject constructor(
         } else 0.0
 
         val consistencyScore = calculateConsistencyScoreFromSessions(completedCurrentSessions)
+        
+        val heelToHandReach = user.heelToHandReachCm ?: 0.0
+        val bestSpikeReach = if (heelToHandReach > 0) {
+            (completedCurrentSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0) + heelToHandReach
+        } else 0.0
+        
+        val averageSpikeReach = if (completedCurrentSessions.isNotEmpty() && heelToHandReach > 0) {
+            currentAvgHeight + heelToHandReach
+        } else 0.0
+        
+        val previousAvgSpikeReach = if (completedPreviousSessions.isNotEmpty() && heelToHandReach > 0) {
+            previousAvgHeight + heelToHandReach
+        } else 0.0
+        
+        val spikeReachImprovement = if (previousAvgSpikeReach > 0) {
+            ((averageSpikeReach - previousAvgSpikeReach) / previousAvgSpikeReach) * 100
+        } else 0.0
 
         return PeriodStats(
             jumpCount = completedCurrentSessions.size, // Each completed session = 1 jump
             sessionCount = currentSessions.size,
             bestJumpHeight = completedCurrentSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
             averageJumpHeight = currentAvgHeight,
+            bestSpikeReach = bestSpikeReach,
+            averageSpikeReach = averageSpikeReach,
             totalFlightTime = 0L, // Flight time not tracked in simplified system
             improvement = improvement,
+            spikeReachImprovement = spikeReachImprovement,
             consistencyScore = consistencyScore
         )
     }
@@ -237,16 +264,22 @@ class StatisticsRepository @Inject constructor(
         jumps: List<com.watxaut.myjumpapp.data.database.entities.Jump>,
         sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
     ): ProgressStats {
+        // For now, we don't have user data in this context, so spike reach will be 0
+        val heelToHandReach = 0.0
         val completedSessions = sessions.filter { it.isCompleted }
         val sessionsByDay = completedSessions.groupBy { 
             LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
         }
 
         val heightProgression = sessionsByDay.map { (date, daySessions) ->
+            val avgHeight = daySessions.map { it.bestJumpHeight }.average()
+            val bestHeight = daySessions.maxOf { it.bestJumpHeight }
             HeightDataPoint(
                 date = date,
-                averageHeight = daySessions.map { it.bestJumpHeight }.average(),
-                bestHeight = daySessions.maxOf { it.bestJumpHeight },
+                averageHeight = avgHeight,
+                bestHeight = bestHeight,
+                averageSpikeReach = if (heelToHandReach > 0) avgHeight + heelToHandReach else 0.0,
+                bestSpikeReach = if (heelToHandReach > 0) bestHeight + heelToHandReach else 0.0,
                 jumpCount = daySessions.size // Each session = 1 jump
             )
         }.sortedBy { it.date }
@@ -313,14 +346,18 @@ class StatisticsRepository @Inject constructor(
         val completedSessions = sessions.filter { it.isCompleted }
         
         if (completedSessions.isEmpty()) {
-            return PersonalRecords(null, null, null, null, null)
+            return PersonalRecords(null, null, null, null, null, null, null)
         }
+        
+        // Get heel to hand reach (simplified approach)
+        val heelToHandReach = 0.0 // Would need user data here
 
         // Highest jump based on sessions (since each session = 1 jump)
         val highestJump = completedSessions.maxByOrNull { it.bestJumpHeight }?.let { session ->
             JumpRecord(
                 jumpId = session.sessionId, // Use sessionId as jumpId
                 height = session.bestJumpHeight,
+                spikeReach = if (heelToHandReach > 0) session.bestJumpHeight + heelToHandReach else 0.0,
                 flightTime = null, // Flight time not tracked in simplified system
                 date = LocalDateTime.ofInstant(
                     java.time.Instant.ofEpochMilli(session.startTime),
@@ -329,6 +366,23 @@ class StatisticsRepository @Inject constructor(
                 sessionId = session.sessionId
             )
         }
+        
+        // Highest spike reach record
+        val highestSpikeReach = if (heelToHandReach > 0) {
+            completedSessions.maxByOrNull { it.bestJumpHeight }?.let { session ->
+                JumpRecord(
+                    jumpId = session.sessionId,
+                    height = session.bestJumpHeight,
+                    spikeReach = session.bestJumpHeight + heelToHandReach,
+                    flightTime = null,
+                    date = LocalDateTime.ofInstant(
+                        java.time.Instant.ofEpochMilli(session.startTime),
+                        ZoneId.systemDefault()
+                    ),
+                    sessionId = session.sessionId
+                )
+            }
+        } else null
 
         // For flight time, use jumps if available, otherwise skip
         val longestFlightTime = jumps.filter { it.flightTimeMs != null }
@@ -336,6 +390,7 @@ class StatisticsRepository @Inject constructor(
                 JumpRecord(
                     jumpId = jump.jumpId,
                     height = jump.heightCm,
+                    spikeReach = if (heelToHandReach > 0) jump.heightCm + heelToHandReach else 0.0,
                     flightTime = jump.flightTimeMs,
                     date = LocalDateTime.ofInstant(
                         java.time.Instant.ofEpochMilli(jump.timestamp),
@@ -350,11 +405,13 @@ class StatisticsRepository @Inject constructor(
             LocalDate.ofEpochDay(it.startTime / (24 * 60 * 60 * 1000))
         }
         val mostJumpsInDay = sessionsByDay.maxByOrNull { it.value.size }?.let { (date, daySessions) ->
+            val bestHeight = daySessions.maxOf { it.bestJumpHeight }
             DayRecord(
                 date = date,
                 jumpCount = daySessions.size, // Each session = 1 jump
                 sessionCount = daySessions.size,
-                bestHeight = daySessions.maxOf { it.bestJumpHeight }
+                bestHeight = bestHeight,
+                bestSpikeReach = if (heelToHandReach > 0) bestHeight + heelToHandReach else 0.0
             )
         }
 
@@ -371,13 +428,30 @@ class StatisticsRepository @Inject constructor(
                 )
             )
         }
+        
+        // Best average spike reach in session
+        val bestAverageSpikeReachInSession = if (heelToHandReach > 0) {
+            completedSessions.maxByOrNull { it.bestJumpHeight }?.let { session ->
+                SessionRecord(
+                    sessionId = session.sessionId,
+                    value = session.bestJumpHeight + heelToHandReach,
+                    jumpCount = 1,
+                    date = LocalDateTime.ofInstant(
+                        java.time.Instant.ofEpochMilli(session.startTime),
+                        ZoneId.systemDefault()
+                    )
+                )
+            }
+        } else null
 
         return PersonalRecords(
             highestJump = highestJump,
+            highestSpikeReach = highestSpikeReach,
             longestFlightTime = longestFlightTime,
             mostJumpsInSession = bestSession, // Repurposed as best session
             mostJumpsInDay = mostJumpsInDay,
-            bestAverageHeightInSession = bestSession // Same as best session since 1 jump per session
+            bestAverageHeightInSession = bestSession, // Same as best session since 1 jump per session
+            bestAverageSpikeReachInSession = bestAverageSpikeReachInSession
         )
     }
 
@@ -559,11 +633,13 @@ class StatisticsRepository @Inject constructor(
         val dayJumps = jumps.filter { it.timestamp >= dayStart && it.timestamp < dayEnd }
         val sessionIds = dayJumps.mapNotNull { it.sessionId }.distinct()
         
+        val bestHeight = dayJumps.maxOfOrNull { it.heightCm } ?: 0.0
         return DayStats(
             date = date,
             jumpCount = dayJumps.size,
             sessionCount = sessionIds.size,
-            bestJumpHeight = dayJumps.maxOfOrNull { it.heightCm } ?: 0.0,
+            bestJumpHeight = bestHeight,
+            bestSpikeReach = 0.0, // Would need user data for heel to hand reach
             totalFlightTime = dayJumps.mapNotNull { it.flightTimeMs }.sum()
         )
     }
@@ -579,11 +655,13 @@ class StatisticsRepository @Inject constructor(
             it.startTime >= dayStart && it.startTime < dayEnd && it.isCompleted
         }
         
+        val bestHeight = daySessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0
         return DayStats(
             date = date,
             jumpCount = daySessions.size, // Each session = 1 jump
             sessionCount = daySessions.size,
-            bestJumpHeight = daySessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            bestJumpHeight = bestHeight,
+            bestSpikeReach = 0.0, // Would need user data for heel to hand reach
             totalFlightTime = 0L // Flight time not tracked in simplified system
         )
     }
@@ -603,13 +681,17 @@ class StatisticsRepository @Inject constructor(
             LocalDate.ofEpochDay(it.timestamp / (24 * 60 * 60 * 1000))
         }.distinct().size
 
+        val bestHeight = weekJumps.maxOfOrNull { it.heightCm } ?: 0.0
+        val avgHeight = if (weekJumps.isNotEmpty()) weekJumps.map { it.heightCm }.average() else 0.0
         return WeekStats(
             weekStart = weekStart,
             jumpCount = weekJumps.size,
             sessionCount = weekSessions.size,
             activeDays = activeDays,
-            bestJumpHeight = weekJumps.maxOfOrNull { it.heightCm } ?: 0.0,
-            averageJumpHeight = if (weekJumps.isNotEmpty()) weekJumps.map { it.heightCm }.average() else 0.0
+            bestJumpHeight = bestHeight,
+            averageJumpHeight = avgHeight,
+            bestSpikeReach = 0.0, // Would need user data for heel to hand reach
+            averageSpikeReach = 0.0
         )
     }
 
@@ -631,6 +713,7 @@ class StatisticsRepository @Inject constructor(
             totalJumps = completedSessions.size, // Each completed session = 1 jump
             currentStreak = currentStreak,
             personalBest = completedSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            personalBestSpikeReach = 0.0, // Would need user data for heel to hand reach
             last7DaysJumps = last7DaysSessions.size
         )
     }
@@ -656,6 +739,8 @@ class StatisticsRepository @Inject constructor(
                     jumpCount = session.totalJumps,
                     bestJumpHeight = session.bestJumpHeight,
                     averageJumpHeight = session.averageJumpHeight,
+                    bestSpikeReach = 0.0, // Would need user data for heel to hand reach
+                    averageSpikeReach = 0.0,
                     duration = duration,
                     isCompleted = session.isCompleted
                 )
@@ -669,13 +754,18 @@ class StatisticsRepository @Inject constructor(
         val hardFloorSessions = sessions.filter { it.surfaceType == SurfaceType.HARD_FLOOR }
         val sandSessions = sessions.filter { it.surfaceType == SurfaceType.SAND }
         
+        val heelToHandReach = user.heelToHandReachCm ?: 0.0
+        val hardFloorAvgHeight = if (hardFloorSessions.isNotEmpty()) {
+            hardFloorSessions.map { it.bestJumpHeight }.average()
+        } else 0.0
+        
         val hardFloorStats = SurfaceSpecificStats(
             surfaceType = SurfaceType.HARD_FLOOR,
             totalSessions = user.totalSessionsHardFloor,
             bestHeight = user.bestJumpHeightHardFloor,
-            averageHeight = if (hardFloorSessions.isNotEmpty()) {
-                hardFloorSessions.map { it.bestJumpHeight }.average()
-            } else 0.0,
+            averageHeight = hardFloorAvgHeight,
+            bestSpikeReach = if (heelToHandReach > 0) user.bestJumpHeightHardFloor + heelToHandReach else 0.0,
+            averageSpikeReach = if (heelToHandReach > 0) hardFloorAvgHeight + heelToHandReach else 0.0,
             last7DaysSessions = 0, // TODO: Calculate from actual sessions
             last30DaysSessions = 0, // TODO: Calculate from actual sessions
             firstSessionDate = hardFloorSessions.minByOrNull { it.startTime }?.let {
@@ -686,13 +776,17 @@ class StatisticsRepository @Inject constructor(
             }
         )
         
+        val sandAvgHeight = if (sandSessions.isNotEmpty()) {
+            sandSessions.map { it.bestJumpHeight }.average()
+        } else 0.0
+        
         val sandStats = SurfaceSpecificStats(
             surfaceType = SurfaceType.SAND,
             totalSessions = user.totalSessionsSand,
             bestHeight = user.bestJumpHeightSand,
-            averageHeight = if (sandSessions.isNotEmpty()) {
-                sandSessions.map { it.bestJumpHeight }.average()
-            } else 0.0,
+            averageHeight = sandAvgHeight,
+            bestSpikeReach = if (heelToHandReach > 0) user.bestJumpHeightSand + heelToHandReach else 0.0,
+            averageSpikeReach = if (heelToHandReach > 0) sandAvgHeight + heelToHandReach else 0.0,
             last7DaysSessions = 0, // TODO: Calculate from actual sessions
             last30DaysSessions = 0, // TODO: Calculate from actual sessions
             firstSessionDate = sandSessions.minByOrNull { it.startTime }?.let {
@@ -706,6 +800,9 @@ class StatisticsRepository @Inject constructor(
         val comparison = SurfaceComparison(
             heightDifferencePercent = if (hardFloorStats.bestHeight > 0 && sandStats.bestHeight > 0) {
                 ((hardFloorStats.bestHeight - sandStats.bestHeight) / hardFloorStats.bestHeight) * 100
+            } else 0.0,
+            spikeReachDifferencePercent = if (hardFloorStats.bestSpikeReach > 0 && sandStats.bestSpikeReach > 0) {
+                ((hardFloorStats.bestSpikeReach - sandStats.bestSpikeReach) / hardFloorStats.bestSpikeReach) * 100
             } else 0.0,
             preferredSurface = when {
                 hardFloorStats.totalSessions > sandStats.totalSessions -> SurfaceType.HARD_FLOOR

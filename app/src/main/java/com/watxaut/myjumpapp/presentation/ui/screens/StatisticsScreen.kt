@@ -227,12 +227,29 @@ private fun OverviewTab(
                     icon = Icons.Default.Info,
                     modifier = Modifier.weight(1f)
                 )
-                QuickStatCard(
-                    title = "Sessions",
-                    value = "${statistics.overallStats.totalSessions}",
-                    icon = Icons.Default.Phone,
-                    modifier = Modifier.weight(1f)
-                )
+            }
+            
+            // Spike Reach Section
+            if (statistics.overallStats.bestSpikeReach > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    QuickStatCard(
+                        title = "Best Spike Reach",
+                        value = "${String.format("%.1f", statistics.overallStats.bestSpikeReach)}cm",
+                        icon = Icons.Default.Star,
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickStatCard(
+                        title = "Avg Spike Reach",
+                        value = "${String.format("%.1f", statistics.overallStats.averageSpikeReach)}cm",
+                        icon = Icons.Default.KeyboardArrowUp,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
 
@@ -421,6 +438,7 @@ private fun RecordsTab(
                 ) {
                     val currentStatistics = uiState.userStatistics ?: statistics
                     val hasAnyRecords = currentStatistics.achievementStats.personalRecords.highestJump != null ||
+                            currentStatistics.achievementStats.personalRecords.highestSpikeReach != null ||
                             currentStatistics.achievementStats.personalRecords.longestFlightTime != null ||
                             currentStatistics.achievementStats.personalRecords.mostJumpsInDay != null
                     
@@ -431,6 +449,17 @@ private fun RecordsTab(
                                 value = "${String.format("%.1f", record.height)}cm",
                                 date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
                                 icon = Icons.Default.KeyboardArrowUp
+                            )
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                        
+                        currentStatistics.achievementStats.personalRecords.highestSpikeReach?.let { record ->
+                            PersonalRecordItem(
+                                title = "Highest Spike Reach",
+                                value = "${String.format("%.1f", record.spikeReach)}cm",
+                                date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                                icon = Icons.Default.Star
                             )
                             
                             Spacer(modifier = Modifier.height(12.dp))

@@ -1,5 +1,6 @@
 package com.watxaut.myjumpapp.data.repository
 
+import android.util.Log
 import com.watxaut.myjumpapp.data.database.dao.UserDao
 import com.watxaut.myjumpapp.data.database.entities.User
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
@@ -13,6 +14,7 @@ class UserRepository @Inject constructor(
 ) {
     
     fun getAllActiveUsers(): Flow<List<User>> {
+        Log.d("UserRepository", "Getting all active users")
         return userDao.getAllActiveUsers()
     }
     
@@ -25,7 +27,9 @@ class UserRepository @Inject constructor(
     }
     
     suspend fun insertUser(user: User) {
+        Log.d("UserRepository", "Inserting user: ${user.userName} with ID: ${user.userId}")
         userDao.insertUser(user)
+        Log.d("UserRepository", "User inserted successfully")
     }
     
     suspend fun updateUser(user: User) {
@@ -70,5 +74,17 @@ class UserRepository @Inject constructor(
     
     suspend fun getAllUsers(): List<User> {
         return userDao.getAllUsers()
+    }
+    
+    // Debug function to test database connectivity
+    suspend fun testDatabaseConnection(): Boolean {
+        return try {
+            val count = userDao.getActiveUserCount()
+            Log.d("UserRepository", "Database test - Active user count: $count")
+            true
+        } catch (e: Exception) {
+            Log.e("UserRepository", "Database test failed", e)
+            false
+        }
     }
 }

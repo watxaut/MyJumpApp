@@ -19,6 +19,8 @@ data class OverallStats(
     val totalSessions: Int,
     val bestJumpHeight: Double,
     val averageJumpHeight: Double,
+    val bestSpikeReach: Double,
+    val averageSpikeReach: Double,
     val totalFlightTime: Long, // in milliseconds
     val averageFlightTime: Long, // in milliseconds
     val firstJumpDate: LocalDateTime?,
@@ -38,8 +40,11 @@ data class PeriodStats(
     val sessionCount: Int,
     val bestJumpHeight: Double,
     val averageJumpHeight: Double,
+    val bestSpikeReach: Double,
+    val averageSpikeReach: Double,
     val totalFlightTime: Long,
     val improvement: Double, // percentage change from previous period
+    val spikeReachImprovement: Double, // percentage change from previous period for spike reach
     val consistencyScore: Double // 0-100, based on regularity of jumping
 )
 
@@ -53,6 +58,8 @@ data class HeightDataPoint(
     val date: LocalDate,
     val averageHeight: Double,
     val bestHeight: Double,
+    val averageSpikeReach: Double,
+    val bestSpikeReach: Double,
     val jumpCount: Int
 )
 
@@ -77,15 +84,18 @@ data class AchievementStats(
 
 data class PersonalRecords(
     val highestJump: JumpRecord?,
+    val highestSpikeReach: JumpRecord?,
     val longestFlightTime: JumpRecord?,
     val mostJumpsInSession: SessionRecord?,
     val mostJumpsInDay: DayRecord?,
-    val bestAverageHeightInSession: SessionRecord?
+    val bestAverageHeightInSession: SessionRecord?,
+    val bestAverageSpikeReachInSession: SessionRecord?
 )
 
 data class JumpRecord(
     val jumpId: String,
     val height: Double,
+    val spikeReach: Double,
     val flightTime: Long?,
     val date: LocalDateTime,
     val sessionId: String?
@@ -102,7 +112,8 @@ data class DayRecord(
     val date: LocalDate,
     val jumpCount: Int,
     val sessionCount: Int,
-    val bestHeight: Double
+    val bestHeight: Double,
+    val bestSpikeReach: Double
 )
 
 data class Milestone(
@@ -118,6 +129,7 @@ data class Milestone(
 
 enum class MilestoneCategory {
     HEIGHT,
+    SPIKE_REACH,
     VOLUME,
     CONSISTENCY,
     FLIGHT_TIME
@@ -144,6 +156,7 @@ data class DayStats(
     val jumpCount: Int,
     val sessionCount: Int,
     val bestJumpHeight: Double,
+    val bestSpikeReach: Double,
     val totalFlightTime: Long
 )
 
@@ -153,13 +166,16 @@ data class WeekStats(
     val sessionCount: Int,
     val activeDays: Int,
     val bestJumpHeight: Double,
-    val averageJumpHeight: Double
+    val averageJumpHeight: Double,
+    val bestSpikeReach: Double,
+    val averageSpikeReach: Double
 )
 
 data class QuickStats(
     val totalJumps: Int,
     val currentStreak: Int,
     val personalBest: Double,
+    val personalBestSpikeReach: Double,
     val last7DaysJumps: Int
 )
 
@@ -170,6 +186,8 @@ data class SessionSummary(
     val jumpCount: Int,
     val bestJumpHeight: Double,
     val averageJumpHeight: Double,
+    val bestSpikeReach: Double,
+    val averageSpikeReach: Double,
     val duration: Long, // in milliseconds
     val isCompleted: Boolean
 )
@@ -188,6 +206,7 @@ enum class TimePeriod {
 
 enum class StatisticType {
     HEIGHT,
+    SPIKE_REACH,
     VOLUME,
     CONSISTENCY,
     FLIGHT_TIME,
@@ -206,6 +225,8 @@ data class SurfaceSpecificStats(
     val totalSessions: Int,
     val bestHeight: Double,
     val averageHeight: Double,
+    val bestSpikeReach: Double,
+    val averageSpikeReach: Double,
     val last7DaysSessions: Int,
     val last30DaysSessions: Int,
     val firstSessionDate: LocalDateTime?,
@@ -214,6 +235,7 @@ data class SurfaceSpecificStats(
 
 data class SurfaceComparison(
     val heightDifferencePercent: Double, // % difference between hard floor and sand
+    val spikeReachDifferencePercent: Double, // % difference between hard floor and sand spike reach
     val preferredSurface: SurfaceType?, // Surface with more sessions
     val sessionRatio: Double // Ratio of hard floor to sand sessions
 )

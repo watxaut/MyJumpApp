@@ -328,7 +328,8 @@ private fun JumpDetectionContent(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "${String.format("%.1f", uiState.maxHeight)} cm",
+                                text = "${String.format("%.1f", uiState.maxHeight)} cm" + 
+                                       if (uiState.maxSpikeReach > 0) " (${String.format("%.1f", uiState.maxSpikeReach)} cm spike)" else "",
                                 style = MaterialTheme.typography.headlineLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -402,7 +403,8 @@ private fun MaxHeightDisplay(uiState: JumpSessionUiState) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Max Height: ${String.format("%.1f", uiState.maxHeight)} cm",
+                text = "Max Height: ${String.format("%.1f", uiState.maxHeight)} cm" + 
+                       if (uiState.maxSpikeReach > 0) " (${String.format("%.1f", uiState.maxSpikeReach)} cm spike)" else "",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary
@@ -429,9 +431,11 @@ private fun SessionStats(uiState: JumpSessionUiState) {
         StatItem(
             label = "Max Height",
             value = if (uiState.hasEyeToHeadMeasurement || uiState.maxHeight == 0.0) {
-                "${String.format("%.1f", uiState.maxHeight)} cm"
+                "${String.format("%.1f", uiState.maxHeight)} cm" + 
+                if (uiState.maxSpikeReach > 0) " (${String.format("%.1f", uiState.maxSpikeReach)} cm spike)" else ""
             } else {
-                "${String.format("%.1f", uiState.maxHeight)} cm (${String.format("%.1f", uiState.maxHeightLowerBound)}-${String.format("%.1f", uiState.maxHeightUpperBound)})"
+                "${String.format("%.1f", uiState.maxHeight)} cm (${String.format("%.1f", uiState.maxHeightLowerBound)}-${String.format("%.1f", uiState.maxHeightUpperBound)})" +
+                if (uiState.maxSpikeReach > 0) " | Spike: ${String.format("%.1f", uiState.maxSpikeReach)} cm" else ""
             }
         )
     }

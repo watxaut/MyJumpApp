@@ -40,3 +40,13 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         database.execSQL("ALTER TABLE users ADD COLUMN eye_to_head_vertex_cm REAL")
     }
 }
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add heel_to_hand_reach_cm column to users table for spike reach measurement
+        database.execSQL("ALTER TABLE users ADD COLUMN heel_to_hand_reach_cm REAL")
+        
+        // Add spike_reach_cm column to jumps table for spike reach tracking
+        database.execSQL("ALTER TABLE jumps ADD COLUMN spike_reach_cm REAL NOT NULL DEFAULT 0.0")
+    }
+}

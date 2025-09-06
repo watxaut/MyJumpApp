@@ -43,6 +43,9 @@ data class Jump(
     @ColumnInfo(name = "height_cm")
     val heightCm: Double,
     
+    @ColumnInfo(name = "spike_reach_cm")
+    val spikeReachCm: Double = 0.0,
+    
     @ColumnInfo(name = "timestamp")
     val timestamp: Long = System.currentTimeMillis(),
     

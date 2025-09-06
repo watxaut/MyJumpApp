@@ -2,6 +2,7 @@ package com.watxaut.myjumpapp.presentation.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
 import com.watxaut.myjumpapp.data.database.entities.User
 import com.watxaut.myjumpapp.data.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,13 +26,20 @@ class UserSelectionViewModel @Inject constructor(
     
     init {
         loadUsers()
+        // Test database connectivity
+        viewModelScope.launch {
+            val dbTest = userRepository.testDatabaseConnection()
+            Log.d("UserSelectionVM", "Database connectivity test: $dbTest")
+        }
     }
     
     private fun loadUsers() {
+        Log.d("UserSelectionVM", "Loading users...")
         viewModelScope.launch {
             try {
                 userRepository.getAllActiveUsers()
                     .catch { exception ->
+                        Log.e("UserSelectionVM", "Error loading users", exception)
                         _uiState.update { currentState ->
                             currentState.copy(
                                 isLoading = false,
@@ -40,6 +48,7 @@ class UserSelectionViewModel @Inject constructor(
                         }
                     }
                     .collect { users ->
+                        Log.d("UserSelectionVM", "Loaded ${users.size} users: ${users.map { it.userName }}")
                         _uiState.update { currentState ->
                             currentState.copy(
                                 users = users,
@@ -49,6 +58,7 @@ class UserSelectionViewModel @Inject constructor(
                         }
                     }
             } catch (exception: Exception) {
+                Log.e("UserSelectionVM", "Exception loading users", exception)
                 _uiState.update { currentState ->
                     currentState.copy(
                         isLoading = false,
@@ -59,18 +69,23 @@ class UserSelectionViewModel @Inject constructor(
         }
     }
     
-    fun createUser(name: String, height: Int?, weight: Double?, eyeToHeadVertexCm: Double?) {
+    fun createUser(name: String, height: Int?, weight: Double?, eyeToHeadVertexCm: Double?, heelToHandReachCm: Double?) {
+        Log.d("UserSelectionVM", "Creating user: $name, height: $height, weight: $weight, eyeToHead: $eyeToHeadVertexCm, heelToHand: $heelToHandReachCm")
         viewModelScope.launch {
             try {
                 val user = User(
                     userName = name.trim(),
                     heightCm = height,
                     weightKg = weight,
-                    eyeToHeadVertexCm = eyeToHeadVertexCm
+                    eyeToHeadVertexCm = eyeToHeadVertexCm,
+                    heelToHandReachCm = heelToHandReachCm
                 )
+                Log.d("UserSelectionVM", "User object created: $user")
                 userRepository.insertUser(user)
+                Log.d("UserSelectionVM", "User inserted successfully")
                 // Users list will be automatically updated via Flow
             } catch (exception: Exception) {
+                Log.e("UserSelectionVM", "Failed to create user", exception)
                 _uiState.update { currentState ->
                     currentState.copy(
                         error = exception.message ?: "Failed to create user"

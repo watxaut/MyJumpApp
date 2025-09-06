@@ -15,7 +15,7 @@ import com.watxaut.myjumpapp.utils.database.Converters
 
 @Database(
     entities = [User::class, Jump::class, JumpSession::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

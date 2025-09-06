@@ -118,8 +118,8 @@ fun UserSelectionScreen(
     if (showCreateUserDialog) {
         CreateUserDialog(
             onDismiss = { showCreateUserDialog = false },
-            onCreateUser = { name, height, weight, eyeToHeadVertex ->
-                viewModel.createUser(name, height, weight, eyeToHeadVertex)
+            onCreateUser = { name, height, weight, eyeToHeadVertex, heelToHandReach ->
+                viewModel.createUser(name, height, weight, eyeToHeadVertex, heelToHandReach)
                 showCreateUserDialog = false
             }
         )
@@ -171,12 +171,13 @@ private fun UserListItem(
 @Composable
 private fun CreateUserDialog(
     onDismiss: () -> Unit,
-    onCreateUser: (String, Int?, Double?, Double?) -> Unit
+    onCreateUser: (String, Int?, Double?, Double?, Double?) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var height by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
     var eyeToHeadVertex by remember { mutableStateOf("") }
+    var heelToHandReach by remember { mutableStateOf("") }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -216,6 +217,15 @@ private fun CreateUserDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                OutlinedTextField(
+                    value = heelToHandReach,
+                    onValueChange = { heelToHandReach = it },
+                    label = { Text("Heel to hand reach (cm) *") },
+                    placeholder = { Text("Standing reach with arm raised") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
@@ -224,9 +234,10 @@ private fun CreateUserDialog(
                     val heightInt = height.toIntOrNull()
                     val weightDouble = weight.toDoubleOrNull()
                     val eyeToHeadVertexDouble = eyeToHeadVertex.toDoubleOrNull()
-                    onCreateUser(name, heightInt, weightDouble, eyeToHeadVertexDouble)
+                    val heelToHandReachDouble = heelToHandReach.toDoubleOrNull()
+                    onCreateUser(name, heightInt, weightDouble, eyeToHeadVertexDouble, heelToHandReachDouble)
                 },
-                enabled = name.isNotBlank()
+                enabled = name.isNotBlank() && heelToHandReach.isNotBlank() && heelToHandReach.toDoubleOrNull() != null
             ) {
                 Text("Create")
             }

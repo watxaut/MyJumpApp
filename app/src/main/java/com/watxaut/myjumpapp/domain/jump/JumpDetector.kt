@@ -15,6 +15,9 @@ data class JumpData(
     val maxHeight: Double = 0.0,
     val maxHeightLowerBound: Double = 0.0,
     val maxHeightUpperBound: Double = 0.0,
+    val maxSpikeReach: Double = 0.0,
+    val maxSpikeReachLowerBound: Double = 0.0,
+    val maxSpikeReachUpperBound: Double = 0.0,
     val hasEyeToHeadMeasurement: Boolean = false,
     val debugInfo: DebugInfo = DebugInfo()
 )
@@ -78,6 +81,8 @@ class JumpDetector @Inject constructor() {
     private var userHeightCm: Double = 0.0
     @Volatile
     private var eyeToHeadVertexCm: Double? = null
+    @Volatile
+    private var heelToHandReachCm: Double = 0.0
     
     // Movement stability detection
     @Volatile
@@ -238,16 +243,25 @@ class JumpDetector @Inject constructor() {
                 Pair(maxHeightCm, maxHeightCm)
             }
             
-            Log.d("JumpDetector", "New max height reached: ${String.format("%.1f", maxHeightCm)}cm" + 
-                  if (eyeToHeadVertexCm == null && userHeightCm > 0) 
-                      " (${String.format("%.1f", maxLowerBound)} - ${String.format("%.1f", maxUpperBound)}cm)" 
-                  else "")
+            // Calculate spike reach (jump height + standing reach)
+            val maxSpikeReach = maxHeightCm + heelToHandReachCm
+            val maxSpikeReachLowerBound = maxLowerBound + heelToHandReachCm
+            val maxSpikeReachUpperBound = maxUpperBound + heelToHandReachCm
             
-            // Update jump data with new maximum height
+            Log.d("JumpDetector", "New max height reached: ${String.format("%.1f", maxHeightCm)}cm" + 
+                  (if (eyeToHeadVertexCm == null && userHeightCm > 0) 
+                      " (${String.format("%.1f", maxLowerBound)} - ${String.format("%.1f", maxUpperBound)}cm)" 
+                  else "") +
+                  " | Spike reach: ${String.format("%.1f", maxSpikeReach)}cm")
+            
+            // Update jump data with new maximum height and spike reach
             _jumpData.value = _jumpData.value.copy(
                 maxHeight = maxHeightCm,
                 maxHeightLowerBound = maxLowerBound,
                 maxHeightUpperBound = maxUpperBound,
+                maxSpikeReach = maxSpikeReach,
+                maxSpikeReachLowerBound = maxSpikeReachLowerBound,
+                maxSpikeReachUpperBound = maxSpikeReachUpperBound,
                 hasEyeToHeadMeasurement = eyeToHeadVertexCm != null
             )
         }
@@ -441,9 +455,10 @@ class JumpDetector @Inject constructor() {
         return allLandmarksVisible
     }
     
-    fun setUserHeight(userHeightCm: Double, eyeToHeadVertexCm: Double? = null) {
+    fun setUserHeight(userHeightCm: Double, eyeToHeadVertexCm: Double? = null, heelToHandReachCm: Double = 0.0) {
         this.userHeightCm = userHeightCm
         this.eyeToHeadVertexCm = eyeToHeadVertexCm
+        this.heelToHandReachCm = heelToHandReachCm
         if (fullBodyPixelHeights.isNotEmpty()) {
             val averagePixelHeight = fullBodyPixelHeights.average()
             
@@ -456,7 +471,7 @@ class JumpDetector @Inject constructor() {
             }
             
             pixelToCmRatio = averagePixelHeight / eyeToHeelHeightCm
-            Log.i("JumpDetector", "Updated pixel-to-cm ratio: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToHeel: ${eyeToHeelHeightCm}cm, avgPixelHeight: $averagePixelHeight, eyeToHeadVertex: ${eyeToHeadVertexCm ?: "not provided"})")
+            Log.i("JumpDetector", "Updated pixel-to-cm ratio: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToHeel: ${eyeToHeelHeightCm}cm, avgPixelHeight: $averagePixelHeight, eyeToHeadVertex: ${eyeToHeadVertexCm ?: "not provided"}, heelToHandReach: ${heelToHandReachCm}cm)")
         } else {
             Log.w("JumpDetector", "Cannot set pixel-to-cm ratio: no full body measurements available")
         }

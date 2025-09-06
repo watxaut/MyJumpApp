@@ -31,6 +31,9 @@ data class JumpSessionUiState(
     val maxHeight: Double = 0.0,
     val maxHeightLowerBound: Double = 0.0,
     val maxHeightUpperBound: Double = 0.0,
+    val maxSpikeReach: Double = 0.0,
+    val maxSpikeReachLowerBound: Double = 0.0,
+    val maxSpikeReachUpperBound: Double = 0.0,
     val hasEyeToHeadMeasurement: Boolean = false,
     val surfaceType: SurfaceType = SurfaceType.HARD_FLOOR,
     val debugInfo: DebugInfo = DebugInfo(),
@@ -67,6 +70,9 @@ class JumpSessionViewModel @Inject constructor(
                         maxHeight = jumpData.maxHeight,
                         maxHeightLowerBound = jumpData.maxHeightLowerBound,
                         maxHeightUpperBound = jumpData.maxHeightUpperBound,
+                        maxSpikeReach = jumpData.maxSpikeReach,
+                        maxSpikeReachLowerBound = jumpData.maxSpikeReachLowerBound,
+                        maxSpikeReachUpperBound = jumpData.maxSpikeReachUpperBound,
                         hasEyeToHeadMeasurement = jumpData.hasEyeToHeadMeasurement,
                         isCalibrating = isNowCalibrating,
                         debugInfo = jumpData.debugInfo
@@ -83,8 +89,8 @@ class JumpSessionViewModel @Inject constructor(
                     viewModelScope.launch {
                         val user = userRepository.getUserById(_uiState.value.userId!!)
                         if (user != null && user.heightCm != null && user.heightCm > 0) {
-                            jumpDetector.setUserHeight(user.heightCm.toDouble(), user.eyeToHeadVertexCm)
-                            Log.i("JumpSessionViewModel", "Set user height for calibration: ${user.heightCm}cm, eyeToHeadVertex: ${user.eyeToHeadVertexCm ?: "not provided"}")
+                            jumpDetector.setUserHeight(user.heightCm.toDouble(), user.eyeToHeadVertexCm, user.heelToHandReachCm ?: 0.0)
+                            Log.i("JumpSessionViewModel", "Set user height for calibration: ${user.heightCm}cm, eyeToHeadVertex: ${user.eyeToHeadVertexCm ?: "not provided"}, heelToHandReach: ${user.heelToHandReachCm ?: 0.0}cm")
                         } else {
                             Log.w("JumpSessionViewModel", "User height not available for calibration")
                         }
