@@ -57,5 +57,8 @@ data class User(
     val isActive: Boolean = true,
     
     @ColumnInfo(name = "eye_to_head_vertex_cm")
-    val eyeToHeadVertexCm: Double? = null
+    val eyeToHeadVertexCm: Double? = null,
+    
+    @ColumnInfo(name = "heel_to_hand_reach_cm")
+    val heelToHandReachCm: Double? = null
 )

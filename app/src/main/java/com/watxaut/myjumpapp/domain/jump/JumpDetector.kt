@@ -140,7 +140,7 @@ class JumpDetector @Inject constructor() {
             calculateFullBodyPixelHeight(pose) ?: 0.0
         }
         
-        val eyeToAnkleHeightCm = if (userHeightCm > 0) userHeightCm * 0.884 else 0.0
+        val eyeToHeelHeightCm = if (userHeightCm > 0) userHeightCm * 0.884 else 0.0
         
         // Check for position warnings if calibrated (without affecting tracking)
         val positionWarning = if (isCalibrated && currentHipY != null) {
@@ -181,7 +181,7 @@ class JumpDetector @Inject constructor() {
             totalBodyHeightPixels = totalBodyHeightPixels,
             pixelToCmRatio = pixelToCmRatio,
             userHeightCm = userHeightCm,
-            eyeToAnkleHeightCm = eyeToAnkleHeightCm,
+            eyeToAnkleHeightCm = eyeToHeelHeightCm,
             positionWarning = positionWarning,
             jumpHeightLowerBound = lowerBound,
             jumpHeightUpperBound = upperBound,
@@ -338,22 +338,22 @@ class JumpDetector @Inject constructor() {
         // Get eye landmarks
         val leftEye = pose.getPoseLandmark(PoseLandmark.LEFT_EYE)
         val rightEye = pose.getPoseLandmark(PoseLandmark.RIGHT_EYE)
-        val leftAnkle = pose.getPoseLandmark(PoseLandmark.LEFT_ANKLE)
-        val rightAnkle = pose.getPoseLandmark(PoseLandmark.RIGHT_ANKLE)
+        val leftHeel = pose.getPoseLandmark(PoseLandmark.LEFT_HEEL)
+        val rightHeel = pose.getPoseLandmark(PoseLandmark.RIGHT_HEEL)
         
-        if (leftEye == null || rightEye == null || leftAnkle == null || rightAnkle == null) {
+        if (leftEye == null || rightEye == null || leftHeel == null || rightHeel == null) {
             Log.w("JumpDetector", "Missing landmarks for full body height calculation")
             return null
         }
         
-        // Calculate center point of eyes and ankles
+        // Calculate center point of eyes and heels
         val eyeCenterY = (leftEye.position.y + rightEye.position.y) / 2
-        val ankleCenterY = (leftAnkle.position.y + rightAnkle.position.y) / 2
+        val heelCenterY = (leftHeel.position.y + rightHeel.position.y) / 2
         
-        // Calculate eye-to-ankle pixel distance
-        val fullBodyPixelHeight = (ankleCenterY - eyeCenterY).toDouble()
+        // Calculate eye-to-heel pixel distance
+        val fullBodyPixelHeight = (heelCenterY - eyeCenterY).toDouble()
         
-        Log.d("JumpDetector", "Full body pixel height: $fullBodyPixelHeight (eyeY: $eyeCenterY, ankleY: $ankleCenterY)")
+        Log.d("JumpDetector", "Full body pixel height: $fullBodyPixelHeight (eyeY: $eyeCenterY, heelY: $heelCenterY)")
         
         return fullBodyPixelHeight
     }
@@ -361,8 +361,18 @@ class JumpDetector @Inject constructor() {
     private fun isFullBodyVisible(pose: Pose): Boolean {
         val confidenceThreshold = 0.96f
 
-        // Print all landmarks and their confidence
+        // Print only heels, hips, and eyes landmarks and their confidence
         val landmarkNames = mapOf(
+            PoseLandmark.LEFT_EYE to "LEFT_EYE",
+            PoseLandmark.RIGHT_EYE to "RIGHT_EYE",
+            PoseLandmark.LEFT_HIP to "LEFT_HIP",
+            PoseLandmark.RIGHT_HIP to "RIGHT_HIP",
+            PoseLandmark.LEFT_HEEL to "LEFT_HEEL",
+            PoseLandmark.RIGHT_HEEL to "RIGHT_HEEL"
+        )
+        
+        // Full list of landmarks for calibration check
+        val allLandmarkNames = mapOf(
             PoseLandmark.NOSE to "NOSE",
             PoseLandmark.LEFT_EYE_INNER to "LEFT_EYE_INNER",
             PoseLandmark.LEFT_EYE to "LEFT_EYE",
@@ -405,20 +415,20 @@ class JumpDetector @Inject constructor() {
         }
         
         // Check if ALL landmarks are visible with confidence > 0.95
-        val allLandmarksVisible = landmarkNames.all { (landmarkType, _) ->
+        val allLandmarksVisible = allLandmarkNames.all { (landmarkType, _) ->
             val landmark = pose.getPoseLandmark(landmarkType)
             val confidence = landmark?.inFrameLikelihood ?: 0f
             confidence > confidenceThreshold
         }
         
-        val visibleLandmarksCount = landmarkNames.count { (landmarkType, _) ->
+        val visibleLandmarksCount = allLandmarkNames.count { (landmarkType, _) ->
             val landmark = pose.getPoseLandmark(landmarkType)
             val confidence = landmark?.inFrameLikelihood ?: 0f
             confidence > confidenceThreshold
         }
         
         Log.d("JumpDetector", "=== FULL BODY CHECK (confidence > 0.95) ===")
-        Log.d("JumpDetector", "Visible landmarks: $visibleLandmarksCount/${landmarkNames.size}")
+        Log.d("JumpDetector", "Visible landmarks: $visibleLandmarksCount/${allLandmarkNames.size}")
         Log.d("JumpDetector", "All landmarks visible: $allLandmarksVisible")
         
         if (!allLandmarksVisible) {
@@ -437,16 +447,16 @@ class JumpDetector @Inject constructor() {
         if (fullBodyPixelHeights.isNotEmpty()) {
             val averagePixelHeight = fullBodyPixelHeights.average()
             
-            val eyeToAnkleHeightCm = if (eyeToHeadVertexCm != null) {
+            val eyeToHeelHeightCm = if (eyeToHeadVertexCm != null) {
                 // Use precise measurement when available
                 userHeightCm - eyeToHeadVertexCm
             } else {
-                // Eye-to-ankle is approximately 88.4% of full body height (average from research)
+                // Eye-to-heel is approximately 88.4% of full body height (average from research)
                 userHeightCm * 0.884
             }
             
-            pixelToCmRatio = averagePixelHeight / eyeToAnkleHeightCm
-            Log.i("JumpDetector", "Updated pixel-to-cm ratio: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToAnkle: ${eyeToAnkleHeightCm}cm, avgPixelHeight: $averagePixelHeight, eyeToHeadVertex: ${eyeToHeadVertexCm ?: "not provided"})")
+            pixelToCmRatio = averagePixelHeight / eyeToHeelHeightCm
+            Log.i("JumpDetector", "Updated pixel-to-cm ratio: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToHeel: ${eyeToHeelHeightCm}cm, avgPixelHeight: $averagePixelHeight, eyeToHeadVertex: ${eyeToHeadVertexCm ?: "not provided"})")
         } else {
             Log.w("JumpDetector", "Cannot set pixel-to-cm ratio: no full body measurements available")
         }

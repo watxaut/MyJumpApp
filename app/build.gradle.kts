@@ -25,6 +25,11 @@ android {
                 arg("room.schemaLocation", "$projectDir/schemas")
             }
         }
+        
+        // Support for 16KB page size devices
+        ndk {
+            debugSymbolLevel = "SYMBOL_TABLE"
+        }
     }
 
     buildTypes {
@@ -66,6 +71,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
     
