@@ -54,5 +54,8 @@ data class User(
     val totalJumpsSand: Int = 0,
     
     @ColumnInfo(name = "is_active")
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    
+    @ColumnInfo(name = "eye_to_head_vertex_cm")
+    val eyeToHeadVertexCm: Double? = null
 )

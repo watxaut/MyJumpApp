@@ -110,9 +110,9 @@ fun UserProfileScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 
-                                if (uiState.user!!.heightCm != null || uiState.user!!.weightKg != null) {
+                                if (uiState.user!!.heightCm != null || uiState.user!!.weightKg != null || uiState.user!!.eyeToHeadVertexCm != null) {
                                     Row(
-                                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         if (uiState.user!!.heightCm != null) {
                                             Column(
@@ -142,6 +142,23 @@ fun UserProfileScreen(
                                                 )
                                                 Text(
                                                     text = "Weight",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        
+                                        if (uiState.user!!.eyeToHeadVertexCm != null) {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Text(
+                                                    text = "${String.format("%.1f", uiState.user!!.eyeToHeadVertexCm)} cm",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                Text(
+                                                    text = "Eye to Vertex",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )

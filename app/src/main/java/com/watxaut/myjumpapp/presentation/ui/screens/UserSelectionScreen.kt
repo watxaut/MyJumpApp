@@ -118,8 +118,8 @@ fun UserSelectionScreen(
     if (showCreateUserDialog) {
         CreateUserDialog(
             onDismiss = { showCreateUserDialog = false },
-            onCreateUser = { name, height, weight ->
-                viewModel.createUser(name, height, weight)
+            onCreateUser = { name, height, weight, eyeToHeadVertex ->
+                viewModel.createUser(name, height, weight, eyeToHeadVertex)
                 showCreateUserDialog = false
             }
         )
@@ -171,11 +171,12 @@ private fun UserListItem(
 @Composable
 private fun CreateUserDialog(
     onDismiss: () -> Unit,
-    onCreateUser: (String, Int?, Double?) -> Unit
+    onCreateUser: (String, Int?, Double?, Double?) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var height by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
+    var eyeToHeadVertex by remember { mutableStateOf("") }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -206,6 +207,15 @@ private fun CreateUserDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                OutlinedTextField(
+                    value = eyeToHeadVertex,
+                    onValueChange = { eyeToHeadVertex = it },
+                    label = { Text("Eye to head vertex (cm)") },
+                    placeholder = { Text("Optional - improves accuracy") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
@@ -213,7 +223,8 @@ private fun CreateUserDialog(
                 onClick = {
                     val heightInt = height.toIntOrNull()
                     val weightDouble = weight.toDoubleOrNull()
-                    onCreateUser(name, heightInt, weightDouble)
+                    val eyeToHeadVertexDouble = eyeToHeadVertex.toDoubleOrNull()
+                    onCreateUser(name, heightInt, weightDouble, eyeToHeadVertexDouble)
                 },
                 enabled = name.isNotBlank()
             ) {

@@ -13,6 +13,9 @@ import kotlin.math.*
 
 data class JumpData(
     val maxHeight: Double = 0.0,
+    val maxHeightLowerBound: Double = 0.0,
+    val maxHeightUpperBound: Double = 0.0,
+    val hasEyeToHeadMeasurement: Boolean = false,
     val debugInfo: DebugInfo = DebugInfo()
 )
 
@@ -39,7 +42,10 @@ data class DebugInfo(
     val pixelToCmRatio: Double = 1.0,
     val userHeightCm: Double = 0.0,
     val eyeToAnkleHeightCm: Double = 0.0,
-    val positionWarning: String? = null
+    val positionWarning: String? = null,
+    val jumpHeightLowerBound: Double = 0.0,
+    val jumpHeightUpperBound: Double = 0.0,
+    val hasEyeToHeadMeasurement: Boolean = false
 )
 
 
@@ -70,6 +76,8 @@ class JumpDetector @Inject constructor() {
     private var isCalibrated = false
     @Volatile
     private var userHeightCm: Double = 0.0
+    @Volatile
+    private var eyeToHeadVertexCm: Double? = null
     
     // Movement stability detection
     @Volatile
@@ -132,12 +140,24 @@ class JumpDetector @Inject constructor() {
             calculateFullBodyPixelHeight(pose) ?: 0.0
         }
         
-        val eyeToAnkleHeightCm = if (userHeightCm > 0) userHeightCm * 0.85 else 0.0
+        val eyeToAnkleHeightCm = if (userHeightCm > 0) userHeightCm * 0.884 else 0.0
         
         // Check for position warnings if calibrated (without affecting tracking)
         val positionWarning = if (isCalibrated && currentHipY != null) {
             checkForPositionWarning(currentDepth)
         } else null
+        
+        // Calculate confidence intervals for jump height when precise measurement not available
+        val (lowerBound, upperBound) = if (currentHipY != null && isCalibrated && eyeToHeadVertexCm == null && userHeightCm > 0) {
+            val pixelDifference = currentHipY - baselineHeight
+            // Use 5th percentile (87.7%) and 95th percentile (88.7%) for confidence intervals
+            val lowerRatio = userHeightCm * 0.877 / (userHeightCm * 0.884) // 87.7% / 88.4%
+            val upperRatio = userHeightCm * 0.887 / (userHeightCm * 0.884) // 88.7% / 88.4%
+            val baseHeightCm = pixelDifference / pixelToCmRatio
+            Pair(baseHeightCm * lowerRatio, baseHeightCm * upperRatio)
+        } else {
+            Pair(hipHeightCm, hipHeightCm)
+        }
         
         val debugInfo = DebugInfo(
             poseDetected = poseDetected,
@@ -162,7 +182,10 @@ class JumpDetector @Inject constructor() {
             pixelToCmRatio = pixelToCmRatio,
             userHeightCm = userHeightCm,
             eyeToAnkleHeightCm = eyeToAnkleHeightCm,
-            positionWarning = positionWarning
+            positionWarning = positionWarning,
+            jumpHeightLowerBound = lowerBound,
+            jumpHeightUpperBound = upperBound,
+            hasEyeToHeadMeasurement = eyeToHeadVertexCm != null
         )
         
         // Update debug info immediately
@@ -205,11 +228,27 @@ class JumpDetector @Inject constructor() {
         if (smoothedHipY < maxHeightReached || maxHeightReached == 0.0) {
             maxHeightReached = smoothedHipY
             val maxHeightCm = abs(maxHeightReached - baselineHeight) / pixelToCmRatio
-            Log.d("JumpDetector", "New max height reached: ${String.format("%.1f", maxHeightCm)}cm")
+            
+            // Calculate confidence intervals for maximum height
+            val (maxLowerBound, maxUpperBound) = if (eyeToHeadVertexCm == null && userHeightCm > 0) {
+                val lowerRatio = 0.877 / 0.884 // 87.7% / 88.4%
+                val upperRatio = 0.887 / 0.884 // 88.7% / 88.4%
+                Pair(maxHeightCm * lowerRatio, maxHeightCm * upperRatio)
+            } else {
+                Pair(maxHeightCm, maxHeightCm)
+            }
+            
+            Log.d("JumpDetector", "New max height reached: ${String.format("%.1f", maxHeightCm)}cm" + 
+                  if (eyeToHeadVertexCm == null && userHeightCm > 0) 
+                      " (${String.format("%.1f", maxLowerBound)} - ${String.format("%.1f", maxUpperBound)}cm)" 
+                  else "")
             
             // Update jump data with new maximum height
             _jumpData.value = _jumpData.value.copy(
-                maxHeight = maxHeightCm
+                maxHeight = maxHeightCm,
+                maxHeightLowerBound = maxLowerBound,
+                maxHeightUpperBound = maxUpperBound,
+                hasEyeToHeadMeasurement = eyeToHeadVertexCm != null
             )
         }
     }
@@ -392,14 +431,22 @@ class JumpDetector @Inject constructor() {
         return allLandmarksVisible
     }
     
-    fun setUserHeight(userHeightCm: Double) {
+    fun setUserHeight(userHeightCm: Double, eyeToHeadVertexCm: Double? = null) {
         this.userHeightCm = userHeightCm
+        this.eyeToHeadVertexCm = eyeToHeadVertexCm
         if (fullBodyPixelHeights.isNotEmpty()) {
             val averagePixelHeight = fullBodyPixelHeights.average()
-            // Eye-to-ankle is approximately 85% of full body height (15cm offset from eye to head top)
-            val eyeToAnkleHeightCm = userHeightCm * 0.85
+            
+            val eyeToAnkleHeightCm = if (eyeToHeadVertexCm != null) {
+                // Use precise measurement when available
+                userHeightCm - eyeToHeadVertexCm
+            } else {
+                // Eye-to-ankle is approximately 88.4% of full body height (average from research)
+                userHeightCm * 0.884
+            }
+            
             pixelToCmRatio = averagePixelHeight / eyeToAnkleHeightCm
-            Log.i("JumpDetector", "Updated pixel-to-cm ratio with user height: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToAnkle: ${eyeToAnkleHeightCm}cm, avgPixelHeight: $averagePixelHeight)")
+            Log.i("JumpDetector", "Updated pixel-to-cm ratio: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToAnkle: ${eyeToAnkleHeightCm}cm, avgPixelHeight: $averagePixelHeight, eyeToHeadVertex: ${eyeToHeadVertexCm ?: "not provided"})")
         } else {
             Log.w("JumpDetector", "Cannot set pixel-to-cm ratio: no full body measurements available")
         }

@@ -59,13 +59,14 @@ class UserSelectionViewModel @Inject constructor(
         }
     }
     
-    fun createUser(name: String, height: Int?, weight: Double?) {
+    fun createUser(name: String, height: Int?, weight: Double?, eyeToHeadVertexCm: Double?) {
         viewModelScope.launch {
             try {
                 val user = User(
                     userName = name.trim(),
                     heightCm = height,
-                    weightKg = weight
+                    weightKg = weight,
+                    eyeToHeadVertexCm = eyeToHeadVertexCm
                 )
                 userRepository.insertUser(user)
                 // Users list will be automatically updated via Flow

@@ -29,6 +29,9 @@ data class JumpSessionUiState(
     val sessionDuration: Long = 0L,
     val isCalibrating: Boolean = true,
     val maxHeight: Double = 0.0,
+    val maxHeightLowerBound: Double = 0.0,
+    val maxHeightUpperBound: Double = 0.0,
+    val hasEyeToHeadMeasurement: Boolean = false,
     val surfaceType: SurfaceType = SurfaceType.HARD_FLOOR,
     val debugInfo: DebugInfo = DebugInfo(),
     val error: String? = null
@@ -62,10 +65,13 @@ class JumpSessionViewModel @Inject constructor(
                 _uiState.update { currentState ->
                     val newState = currentState.copy(
                         maxHeight = jumpData.maxHeight,
+                        maxHeightLowerBound = jumpData.maxHeightLowerBound,
+                        maxHeightUpperBound = jumpData.maxHeightUpperBound,
+                        hasEyeToHeadMeasurement = jumpData.hasEyeToHeadMeasurement,
                         isCalibrating = isNowCalibrating,
                         debugInfo = jumpData.debugInfo
                     )
-                    Log.i("JumpSessionViewModel", "State updated: isCalibrating=${newState.isCalibrating}, maxHeight=${newState.maxHeight}, isSessionActive=${newState.isSessionActive}")
+                    Log.i("JumpSessionViewModel", "State updated: isCalibrating=${newState.isCalibrating}, maxHeight=${newState.maxHeight}, hasEyeToHead=${newState.hasEyeToHeadMeasurement}, isSessionActive=${newState.isSessionActive}")
                     newState
                 }
                 
@@ -77,8 +83,8 @@ class JumpSessionViewModel @Inject constructor(
                     viewModelScope.launch {
                         val user = userRepository.getUserById(_uiState.value.userId!!)
                         if (user != null && user.heightCm != null && user.heightCm > 0) {
-                            jumpDetector.setUserHeight(user.heightCm.toDouble())
-                            Log.i("JumpSessionViewModel", "Set user height for calibration: ${user.heightCm}cm")
+                            jumpDetector.setUserHeight(user.heightCm.toDouble(), user.eyeToHeadVertexCm)
+                            Log.i("JumpSessionViewModel", "Set user height for calibration: ${user.heightCm}cm, eyeToHeadVertex: ${user.eyeToHeadVertexCm ?: "not provided"}")
                         } else {
                             Log.w("JumpSessionViewModel", "User height not available for calibration")
                         }

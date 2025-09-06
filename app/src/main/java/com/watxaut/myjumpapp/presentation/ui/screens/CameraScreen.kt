@@ -170,58 +170,33 @@ private fun JumpDetectionContent(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Status Bar
+            // Top spacer to push content to bottom
+            Spacer(modifier = Modifier.height(1.dp))
+            
+            // Bottom Banner
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                    containerColor = if (uiState.isSessionActive) 
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                    else 
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (uiState.isCalibrating) {
-                        CalibrationStatus(uiState.debugInfo)
-                    } else {
-                        MaxHeightDisplay(uiState.maxHeight)
-                    }
-                    
-                    // Position warning
-                    uiState.debugInfo.positionWarning?.let { warning ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        PositionWarning(warning)
-                    }
-                    
                     if (uiState.isSessionActive) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        SessionStats(uiState)
-                    }
-                }
-            }
-            
-            // Bottom Controls - Only show stop button when session is active
-            if (uiState.isSessionActive) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                        // Stop session button (reduced height)
                         Button(
                             onClick = onStopSession,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp),
+                                .height(48.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.error
                             )
@@ -229,45 +204,44 @@ private fun JumpDetectionContent(
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Stop Session",
-                                style = MaterialTheme.typography.titleMedium
+                                style = MaterialTheme.typography.titleSmall
                             )
                         }
-                    }
-                }
-            } else if (uiState.isCalibrating) {
-                // Show calibration status when not active and still calibrating
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                    } else {
+                        // Positioning instructions
                         Text(
-                            text = if (uiState.debugInfo.poseDetected) 
-                                "Stay still while calibrating..." 
-                            else 
-                                "Position yourself in camera view",
+                            text = "Place yourself in position",
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            textAlign = TextAlign.Center
+                            color = if (uiState.isCalibrating) 
+                                MaterialTheme.colorScheme.onPrimaryContainer 
+                            else 
+                                MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Session will start automatically",
+                            text = "Stand 2-3 meters away from the camera",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                            color = if (uiState.isCalibrating) 
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            else 
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Make sure your entire body is visible",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (uiState.isCalibrating) 
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            else 
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -275,28 +249,136 @@ private fun JumpDetectionContent(
             }
         }
         
-        // Max Height Display (center overlay) - Always show when not calibrating
-        if (!uiState.isCalibrating && uiState.maxHeight > 0) {
-            Box(
+        // Center Screen Messages
+        Box(
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            when {
+                // Show calibration messages when all landmarks are detected and calibrating
+                uiState.isCalibrating && uiState.debugInfo.poseDetected -> {
+                    Card(
+                        modifier = Modifier
+                            .padding(32.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                progress = if (uiState.debugInfo.isStable) {
+                                    uiState.debugInfo.calibrationProgress.toFloat() / uiState.debugInfo.calibrationFramesNeeded.toFloat()
+                                } else {
+                                    uiState.debugInfo.stabilityProgress
+                                },
+                                modifier = Modifier.size(48.dp),
+                                strokeWidth = 4.dp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            val statusText = when {
+                                !uiState.debugInfo.isStable -> "Stay Still"
+                                uiState.debugInfo.calibrationProgress > 0 -> "Calibrating..."
+                                else -> "Ready to Calibrate"
+                            }
+                            
+                            Text(
+                                text = statusText,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            val subtitleText = if (uiState.debugInfo.isStable) {
+                                "${uiState.debugInfo.calibrationProgress}/${uiState.debugInfo.calibrationFramesNeeded} frames"
+                            } else {
+                                "Minimize movement for accurate calibration"
+                            }
+                            
+                            Text(
+                                text = subtitleText,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White.copy(alpha = 0.8f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+                // Show max height when session is active and not calibrating
+                !uiState.isCalibrating && uiState.maxHeight > 0 -> {
+                    Card(
+                        modifier = Modifier
+                            .padding(24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "${String.format("%.1f", uiState.maxHeight)} cm",
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            if (!uiState.hasEyeToHeadMeasurement && uiState.maxHeight > 0.0) {
+                                Text(
+                                    text = "(${String.format("%.1f", uiState.maxHeightLowerBound)} - ${String.format("%.1f", uiState.maxHeightUpperBound)} cm)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                            Text(
+                                text = "Max Height (${surfaceType.displayName})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Position warning overlay (top of screen)
+        uiState.debugInfo.positionWarning?.let { warning ->
+            Card(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
-                    .padding(24.dp)
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f)
+                ),
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "${String.format("%.1f", uiState.maxHeight)} cm",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Position Warning",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Max Height (${surfaceType.displayName})",
+                        text = warning,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
@@ -305,23 +387,34 @@ private fun JumpDetectionContent(
 }
 
 @Composable
-private fun MaxHeightDisplay(maxHeight: Double) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "Max Height: ${String.format("%.1f", maxHeight)} cm",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary
-        )
+private fun MaxHeightDisplay(uiState: JumpSessionUiState) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Max Height: ${String.format("%.1f", uiState.maxHeight)} cm",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        
+        if (!uiState.hasEyeToHeadMeasurement && uiState.maxHeight > 0.0) {
+            Text(
+                text = "Confidence interval: ${String.format("%.1f", uiState.maxHeightLowerBound)} - ${String.format("%.1f", uiState.maxHeightUpperBound)} cm",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 20.dp, top = 2.dp)
+            )
+        }
     }
 }
 
@@ -333,7 +426,11 @@ private fun SessionStats(uiState: JumpSessionUiState) {
     ) {
         StatItem(
             label = "Max Height",
-            value = "${String.format("%.1f", uiState.maxHeight)} cm"
+            value = if (uiState.hasEyeToHeadMeasurement || uiState.maxHeight == 0.0) {
+                "${String.format("%.1f", uiState.maxHeight)} cm"
+            } else {
+                "${String.format("%.1f", uiState.maxHeight)} cm (${String.format("%.1f", uiState.maxHeightLowerBound)}-${String.format("%.1f", uiState.maxHeightUpperBound)})"
+            }
         )
     }
 }

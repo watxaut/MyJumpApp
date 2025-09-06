@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.watxaut.myjumpapp.data.database.JumpDatabase
 import com.watxaut.myjumpapp.data.database.migrations.MIGRATION_1_2
+import com.watxaut.myjumpapp.data.database.migrations.MIGRATION_2_3
 import com.watxaut.myjumpapp.data.database.dao.JumpDao
 import com.watxaut.myjumpapp.data.database.dao.JumpSessionDao
 import com.watxaut.myjumpapp.data.database.dao.UserDao
@@ -25,7 +26,7 @@ object DatabaseModule {
             context,
             JumpDatabase::class.java,
             JumpDatabase.DATABASE_NAME
-        ).addMigrations(MIGRATION_1_2)
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
     }
 

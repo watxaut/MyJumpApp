@@ -33,3 +33,10 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         """)
     }
 }
+
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add eye_to_head_vertex_cm column to users table
+        database.execSQL("ALTER TABLE users ADD COLUMN eye_to_head_vertex_cm REAL")
+    }
+}
