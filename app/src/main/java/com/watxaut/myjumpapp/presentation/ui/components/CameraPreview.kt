@@ -3,13 +3,14 @@ package com.watxaut.myjumpapp.presentation.ui.components
 import android.content.Context
 import android.util.Log
 import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -41,15 +42,24 @@ fun CameraPreview(
             val cameraProvider = cameraProviderFuture.get()
             Log.i("CameraPreview", "Camera provider obtained successfully")
         
+        val resolutionSelector = ResolutionSelector.Builder()
+            .setAspectRatioStrategy(
+                AspectRatioStrategy(
+                    AspectRatio.RATIO_16_9,
+                    AspectRatioStrategy.FALLBACK_RULE_AUTO
+                )
+            )
+            .build()
+        
         val preview = Preview.Builder()
-            .setTargetAspectRatio(AspectRatio.RATIO_16_9)
+            .setResolutionSelector(resolutionSelector)
             .build()
             .also {
                 it.setSurfaceProvider(view.surfaceProvider)
             }
         
         val imageAnalysis = ImageAnalysis.Builder()
-            .setTargetAspectRatio(AspectRatio.RATIO_16_9)
+            .setResolutionSelector(resolutionSelector)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
             .also { analysis ->

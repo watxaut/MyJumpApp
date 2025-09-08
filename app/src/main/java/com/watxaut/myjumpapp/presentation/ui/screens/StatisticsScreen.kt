@@ -287,7 +287,7 @@ private fun OverviewTab(
                         improvement = statistics.recentStats.last7Days.improvement
                     )
                     
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     
                     RecentStatsRow(
                         label = "Last 30 Days",
@@ -1163,7 +1163,7 @@ private fun MilestoneCard(
                 if (!isAchieved) {
                     Spacer(modifier = Modifier.height(4.dp))
                     LinearProgressIndicator(
-                        progress = (milestone.currentValue / milestone.targetValue).toFloat().coerceIn(0f, 1f),
+                        progress = { (milestone.currentValue / milestone.targetValue).toFloat().coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
