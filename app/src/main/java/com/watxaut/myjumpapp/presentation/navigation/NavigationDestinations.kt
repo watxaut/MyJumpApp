@@ -6,8 +6,11 @@ sealed class NavigationDestinations(val route: String) {
     object SurfaceSelection : NavigationDestinations("surface_selection/{userId}") {
         fun createRoute(userId: String) = "surface_selection/$userId"
     }
-    object Camera : NavigationDestinations("camera/{userId}/{surfaceType}") {
-        fun createRoute(userId: String, surfaceType: String) = "camera/$userId/$surfaceType"
+    object JumpTypeSelection : NavigationDestinations("jump_type_selection/{userId}/{surfaceType}") {
+        fun createRoute(userId: String, surfaceType: String) = "jump_type_selection/$userId/$surfaceType"
+    }
+    object Camera : NavigationDestinations("camera/{userId}/{surfaceType}/{jumpType}") {
+        fun createRoute(userId: String, surfaceType: String, jumpType: String) = "camera/$userId/$surfaceType/$jumpType"
     }
     object Statistics : NavigationDestinations("statistics/{userId}") {
         fun createRoute(userId: String) = "statistics/$userId"

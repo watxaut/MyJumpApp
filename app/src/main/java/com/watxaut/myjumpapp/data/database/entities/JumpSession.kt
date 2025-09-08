@@ -6,6 +6,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import java.util.UUID
 
 @Entity(
@@ -21,7 +22,8 @@ import java.util.UUID
     indices = [
         Index(value = ["user_id"]),
         Index(value = ["start_time"]),
-        Index(value = ["surface_type"])
+        Index(value = ["surface_type"]),
+        Index(value = ["jump_type"])
     ]
 )
 data class JumpSession(
@@ -55,6 +57,15 @@ data class JumpSession(
     
     @ColumnInfo(name = "surface_type")
     val surfaceType: SurfaceType = SurfaceType.HARD_FLOOR,
+    
+    @ColumnInfo(name = "jump_type")
+    val jumpType: JumpType = JumpType.STATIC,
+    
+    @ColumnInfo(name = "hand_reach_height")
+    val handReachHeight: Double = 0.0,
+    
+    @ColumnInfo(name = "theoretical_spike_reach")
+    val theoreticalSpikeReach: Double = 0.0,
     
     @ColumnInfo(name = "is_completed")
     val isCompleted: Boolean = false

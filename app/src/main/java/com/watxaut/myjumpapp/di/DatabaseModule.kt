@@ -6,6 +6,7 @@ import com.watxaut.myjumpapp.data.database.JumpDatabase
 import com.watxaut.myjumpapp.data.database.migrations.MIGRATION_1_2
 import com.watxaut.myjumpapp.data.database.migrations.MIGRATION_2_3
 import com.watxaut.myjumpapp.data.database.migrations.MIGRATION_3_4
+import com.watxaut.myjumpapp.data.database.migrations.MIGRATION_4_5
 import com.watxaut.myjumpapp.data.database.dao.JumpDao
 import com.watxaut.myjumpapp.data.database.dao.JumpSessionDao
 import com.watxaut.myjumpapp.data.database.dao.UserDao
@@ -27,7 +28,7 @@ object DatabaseModule {
             context,
             JumpDatabase::class.java,
             JumpDatabase.DATABASE_NAME
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         .fallbackToDestructiveMigration() // Allow destructive migration during development
         .build()
     }

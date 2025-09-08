@@ -50,3 +50,15 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         database.execSQL("ALTER TABLE jumps ADD COLUMN spike_reach_cm REAL NOT NULL DEFAULT 0.0")
     }
 }
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add jump type columns to jump_sessions table for dynamic jump tracking
+        database.execSQL("ALTER TABLE jump_sessions ADD COLUMN jump_type TEXT NOT NULL DEFAULT 'STATIC'")
+        database.execSQL("ALTER TABLE jump_sessions ADD COLUMN hand_reach_height REAL NOT NULL DEFAULT 0.0")
+        database.execSQL("ALTER TABLE jump_sessions ADD COLUMN theoretical_spike_reach REAL NOT NULL DEFAULT 0.0")
+        
+        // Create index on jump_type for efficient querying
+        database.execSQL("CREATE INDEX index_jump_sessions_jump_type ON jump_sessions(jump_type)")
+    }
+}

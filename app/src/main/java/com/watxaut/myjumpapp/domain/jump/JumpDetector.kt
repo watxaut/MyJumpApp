@@ -18,6 +18,8 @@ data class JumpData(
     val maxSpikeReach: Double = 0.0,
     val maxSpikeReachLowerBound: Double = 0.0,
     val maxSpikeReachUpperBound: Double = 0.0,
+    val maxHandReach: Double = 0.0,
+    val theoreticalSpikeReach: Double = 0.0,
     val hasEyeToHeadMeasurement: Boolean = false,
     val debugInfo: DebugInfo = DebugInfo()
 )
@@ -48,7 +50,11 @@ data class DebugInfo(
     val positionWarning: String? = null,
     val jumpHeightLowerBound: Double = 0.0,
     val jumpHeightUpperBound: Double = 0.0,
-    val hasEyeToHeadMeasurement: Boolean = false
+    val hasEyeToHeadMeasurement: Boolean = false,
+    val handReachHeightCm: Double = 0.0,
+    val currentHandYPixels: Double = 0.0,
+    val baselineHandYPixels: Double = 0.0,
+    val handMovementPixels: Double = 0.0
 )
 
 
@@ -63,9 +69,15 @@ class JumpDetector @Inject constructor() {
     @Volatile
     private var baselineDepth: Double = 0.0
     @Volatile
+    private var baselineHandHeight: Double = 0.0
+    @Volatile
     private var maxHeightReached: Double = 0.0
-@Volatile
+    @Volatile
+    private var maxHandReached: Double = 0.0
+    @Volatile
     private var frameCount = 0
+    @Volatile
+    private var jumpType: JumpType = JumpType.STATIC
     private var calibrationFrames = 60 // Frames to establish baseline
     
     // Bounded collections to prevent memory leaks
@@ -114,9 +126,13 @@ class JumpDetector @Inject constructor() {
         
         val currentHipY = calculateHipCenterY(pose)
         val currentHipZ = calculateHipCenterZ(pose)
+        val currentHandY = if (jumpType == JumpType.DYNAMIC) calculateHandCenterY(pose) else null
         
         Log.d("JumpDetector", "Hip Y calculation result: $currentHipY, frameCount: $frameCount, isCalibrated: $isCalibrated")
         Log.d("JumpDetector", "Hip Z calculation result: $currentHipZ")
+        if (jumpType == JumpType.DYNAMIC) {
+            Log.d("JumpDetector", "Hand Y calculation result: $currentHandY")
+        }
         
         // Check movement stability before calibration
         val (stabilityStatus, stabilityProgress) = checkMovementStability(currentHipY, currentHipZ)
@@ -137,6 +153,17 @@ class JumpDetector @Inject constructor() {
         val currentHipYPixels = currentHipY ?: 0.0
         val hipMovementPixels = if (isCalibrated && currentHipY != null) {
             abs(currentHipY - baselineHeight)
+        } else 0.0
+        
+        // Hand tracking calculations for dynamic jumps
+        val handReachHeightCm = if (jumpType == JumpType.DYNAMIC && currentHandY != null && isCalibrated) {
+            val pixelDifference = currentHandY - baselineHandHeight
+            pixelDifference / pixelToCmRatio
+        } else 0.0
+        
+        val currentHandYPixels = currentHandY ?: 0.0
+        val handMovementPixels = if (jumpType == JumpType.DYNAMIC && isCalibrated && currentHandY != null) {
+            abs(currentHandY - baselineHandHeight)
         } else 0.0
         
         val totalBodyHeightPixels = if (fullBodyPixelHeights.isNotEmpty()) {
@@ -190,7 +217,11 @@ class JumpDetector @Inject constructor() {
             positionWarning = positionWarning,
             jumpHeightLowerBound = lowerBound,
             jumpHeightUpperBound = upperBound,
-            hasEyeToHeadMeasurement = eyeToHeadVertexCm != null
+            hasEyeToHeadMeasurement = eyeToHeadVertexCm != null,
+            handReachHeightCm = handReachHeightCm,
+            currentHandYPixels = currentHandYPixels,
+            baselineHandYPixels = baselineHandHeight,
+            handMovementPixels = handMovementPixels
         )
         
         // Update debug info immediately
@@ -243,7 +274,7 @@ class JumpDetector @Inject constructor() {
                 Pair(maxHeightCm, maxHeightCm)
             }
             
-            // Calculate spike reach (jump height + standing reach)
+            // Calculate spike reach for static jumps (hip jump height + standing reach)
             val maxSpikeReach = maxHeightCm + heelToHandReachCm
             val maxSpikeReachLowerBound = maxLowerBound + heelToHandReachCm
             val maxSpikeReachUpperBound = maxUpperBound + heelToHandReachCm
@@ -265,6 +296,26 @@ class JumpDetector @Inject constructor() {
                 hasEyeToHeadMeasurement = eyeToHeadVertexCm != null
             )
         }
+        
+        // Track maximum hand reach for dynamic jumps (using direct hand tracking, NOT hip + reach)
+        if (jumpType == JumpType.DYNAMIC && currentHandY != null) {
+            if (currentHandY < maxHandReached || maxHandReached == 0.0) {
+                maxHandReached = currentHandY
+                // maxHandReachCm = how much higher the hand went during the jump
+                val maxHandReachCm = abs(maxHandReached - baselineHandHeight) / pixelToCmRatio
+                // theoreticalSpikeReach = absolute height from ground (hand jump + standing reach)
+                // This is different from static jumps which use hip tracking
+                val theoreticalSpikeReach = maxHandReachCm + heelToHandReachCm
+                
+                Log.d("JumpDetector", "New max hand reach: ${String.format("%.1f", maxHandReachCm)}cm | Theoretical spike reach: ${String.format("%.1f", theoreticalSpikeReach)}cm")
+                
+                // Update jump data with new maximum hand reach
+                _jumpData.value = _jumpData.value.copy(
+                    maxHandReach = maxHandReachCm,
+                    theoreticalSpikeReach = theoreticalSpikeReach
+                )
+            }
+        }
     }
     
     private fun calibrateBaseline(height: Double, depth: Double, pose: Pose) {
@@ -274,7 +325,19 @@ class JumpDetector @Inject constructor() {
         if (frameCount <= calibrationFrames) {
             baselineHeight = ((baselineHeight * (frameCount - 1)) + height) / frameCount
             baselineDepth = ((baselineDepth * (frameCount - 1)) + depth) / frameCount
-            Log.i("JumpDetector", "Updated baseline height: $baselineHeight, depth: $baselineDepth")
+            
+            // For dynamic jumps, also calibrate hand baseline
+            if (jumpType == JumpType.DYNAMIC) {
+                val handY = calculateHandCenterY(pose)
+                if (handY != null) {
+                    baselineHandHeight = ((baselineHandHeight * (frameCount - 1)) + handY) / frameCount
+                    Log.i("JumpDetector", "Updated baseline height: $baselineHeight, depth: $baselineDepth, hand: $baselineHandHeight")
+                } else {
+                    Log.i("JumpDetector", "Updated baseline height: $baselineHeight, depth: $baselineDepth, hand: null")
+                }
+            } else {
+                Log.i("JumpDetector", "Updated baseline height: $baselineHeight, depth: $baselineDepth")
+            }
             
             // Collect full body pixel heights in the last half of calibration (frames 31-60)
             if (frameCount > calibrationFrames / 2) {
@@ -302,7 +365,10 @@ class JumpDetector @Inject constructor() {
             
             isCalibrated = true
             maxHeightReached = baselineHeight // Initialize max height to baseline
-            Log.i("JumpDetector", "Calibration completed! Final baseline height: $baselineHeight, pixel-to-cm ratio: $pixelToCmRatio")
+            if (jumpType == JumpType.DYNAMIC) {
+                maxHandReached = baselineHandHeight // Initialize max hand reach to baseline
+            }
+            Log.i("JumpDetector", "Calibration completed! Final baseline height: $baselineHeight, hand: $baselineHandHeight, pixel-to-cm ratio: $pixelToCmRatio")
         }
     }
     
@@ -329,6 +395,35 @@ class JumpDetector @Inject constructor() {
         Log.d("JumpDetector", "Hip center Y: $hipCenterY (leftHip: ${leftHip.position.y}, rightHip: ${rightHip.position.y})")
         
         return hipCenterY.toDouble()
+    }
+    
+    private fun calculateHandCenterY(pose: Pose): Double? {
+        // Get wrist landmarks for hand tracking
+        val leftWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
+        val rightWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+        
+        Log.d("JumpDetector", "Hand landmarks - leftWrist: ${leftWrist != null}, rightWrist: ${rightWrist != null}")
+        
+        // Use the higher hand (lower Y value since Y increases downward)
+        return when {
+            leftWrist != null && rightWrist != null -> {
+                val higherHandY = minOf(leftWrist.position.y, rightWrist.position.y)
+                Log.d("JumpDetector", "Hand center Y: $higherHandY (leftWrist: ${leftWrist.position.y}, rightWrist: ${rightWrist.position.y})")
+                higherHandY.toDouble()
+            }
+            leftWrist != null -> {
+                Log.d("JumpDetector", "Hand center Y (left only): ${leftWrist.position.y}")
+                leftWrist.position.y.toDouble()
+            }
+            rightWrist != null -> {
+                Log.d("JumpDetector", "Hand center Y (right only): ${rightWrist.position.y}")
+                rightWrist.position.y.toDouble()
+            }
+            else -> {
+                Log.w("JumpDetector", "Missing wrist landmarks for hand tracking")
+                null
+            }
+        }
     }
     
     private fun calculateHipCenterZ(pose: Pose): Double? {
@@ -455,6 +550,11 @@ class JumpDetector @Inject constructor() {
         return allLandmarksVisible
     }
     
+    fun setJumpType(jumpType: JumpType) {
+        this.jumpType = jumpType
+        Log.i("JumpDetector", "Jump type set to: ${jumpType.displayName}")
+    }
+    
     fun setUserHeight(userHeightCm: Double, eyeToHeadVertexCm: Double? = null, heelToHandReachCm: Double = 0.0) {
         this.userHeightCm = userHeightCm
         this.eyeToHeadVertexCm = eyeToHeadVertexCm
@@ -481,7 +581,9 @@ class JumpDetector @Inject constructor() {
         frameCount = 0
         baselineHeight = 0.0
         baselineDepth = 0.0
+        baselineHandHeight = 0.0
         maxHeightReached = 0.0
+        maxHandReached = 0.0
         isCalibrated = false
         isStable = false
         stabilityStartTime = 0
@@ -491,7 +593,7 @@ class JumpDetector @Inject constructor() {
         depthHistory.clear()
         pixelToCmRatio = 1.0
         averageDepth = 0.0
-        // Note: Don't reset userHeightCm as it should persist across sessions
+        // Note: Don't reset userHeightCm, jumpType, or heelToHandReachCm as they should persist across sessions
         _jumpData.value = JumpData()
     }
     

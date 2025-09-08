@@ -7,8 +7,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import com.watxaut.myjumpapp.presentation.ui.screens.CameraScreen
 import com.watxaut.myjumpapp.presentation.ui.screens.HomeScreen
+import com.watxaut.myjumpapp.presentation.ui.screens.JumpTypeSelectionScreen
 import com.watxaut.myjumpapp.presentation.ui.screens.SettingsScreen
 import com.watxaut.myjumpapp.presentation.ui.screens.StatisticsScreen
 import com.watxaut.myjumpapp.presentation.ui.screens.SurfaceSelectionScreen
@@ -58,7 +60,29 @@ fun MyJumpAppNavigation(navController: NavHostController) {
                     navController.popBackStack()
                 },
                 onSurfaceSelected = { surfaceType ->
-                    navController.navigate(NavigationDestinations.Camera.createRoute(userId, surfaceType.name))
+                    navController.navigate(NavigationDestinations.JumpTypeSelection.createRoute(userId, surfaceType.name))
+                }
+            )
+        }
+        
+        composable(
+            route = NavigationDestinations.JumpTypeSelection.route,
+            arguments = listOf(
+                navArgument("userId") { type = NavType.StringType },
+                navArgument("surfaceType") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val userId = backStackEntry.arguments?.getString("userId") ?: return@composable
+            val surfaceType = backStackEntry.arguments?.getString("surfaceType") ?: return@composable
+            JumpTypeSelectionScreen(
+                userId = userId,
+                userName = "", // TODO: Get user name from userId - for now empty
+                surfaceType = surfaceType,
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onJumpTypeSelected = { jumpType ->
+                    navController.navigate(NavigationDestinations.Camera.createRoute(userId, surfaceType, jumpType.name))
                 }
             )
         }
@@ -67,15 +91,19 @@ fun MyJumpAppNavigation(navController: NavHostController) {
             route = NavigationDestinations.Camera.route,
             arguments = listOf(
                 navArgument("userId") { type = NavType.StringType },
-                navArgument("surfaceType") { type = NavType.StringType }
+                navArgument("surfaceType") { type = NavType.StringType },
+                navArgument("jumpType") { type = NavType.StringType }
             )
         ) { backStackEntry ->
             val userId = backStackEntry.arguments?.getString("userId")
             val surfaceTypeName = backStackEntry.arguments?.getString("surfaceType") ?: "HARD_FLOOR"
+            val jumpTypeName = backStackEntry.arguments?.getString("jumpType") ?: "STATIC"
             val surfaceType = SurfaceType.fromString(surfaceTypeName)
+            val jumpType = JumpType.fromString(jumpTypeName)
             CameraScreen(
                 userId = userId,
                 surfaceType = surfaceType,
+                jumpType = jumpType,
                 onNavigateBack = {
                     navController.popBackStack()
                 }

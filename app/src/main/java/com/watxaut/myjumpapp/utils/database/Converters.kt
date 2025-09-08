@@ -2,6 +2,7 @@ package com.watxaut.myjumpapp.utils.database
 
 import androidx.room.TypeConverter
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import java.util.Date
 
 class Converters {
@@ -24,5 +25,15 @@ class Converters {
     @TypeConverter
     fun toSurfaceType(surfaceTypeName: String): SurfaceType {
         return SurfaceType.fromString(surfaceTypeName)
+    }
+    
+    @TypeConverter
+    fun fromJumpType(jumpType: JumpType): String {
+        return jumpType.name
+    }
+    
+    @TypeConverter
+    fun toJumpType(jumpTypeName: String): JumpType {
+        return JumpType.fromString(jumpTypeName)
     }
 }

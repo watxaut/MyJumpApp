@@ -11,10 +11,12 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
+import com.watxaut.myjumpapp.domain.jump.JumpType
 
 @Composable
 fun PoseOverlay(
     pose: Pose?,
+    jumpType: JumpType = JumpType.STATIC,
     previewWidth: Float = 864f,  // Default camera preview width
     previewHeight: Float = 480f, // Default camera preview height
     modifier: Modifier = Modifier
@@ -22,6 +24,7 @@ fun PoseOverlay(
     val headColor = MaterialTheme.colorScheme.primary
     val hipColor = MaterialTheme.colorScheme.secondary
     val footColor = MaterialTheme.colorScheme.tertiary
+    val handColor = MaterialTheme.colorScheme.error
     
     Canvas(modifier = modifier.fillMaxSize()) {
         pose?.let { p ->
@@ -39,6 +42,10 @@ fun PoseOverlay(
             drawHipLandmarks(p, hipColor, scaleX, scaleY, effectivePreviewWidth, effectivePreviewHeight)
             // Draw foot landmarks
             drawFootLandmarks(p, footColor, scaleX, scaleY, effectivePreviewWidth, effectivePreviewHeight)
+            // Draw hand landmarks for dynamic jumps
+            if (jumpType == JumpType.DYNAMIC) {
+                drawHandLandmarks(p, handColor, scaleX, scaleY, effectivePreviewWidth, effectivePreviewHeight)
+            }
         }
     }
 }
@@ -110,6 +117,29 @@ private fun DrawScope.drawFootLandmarks(pose: Pose, color: Color, scaleX: Float,
                 drawCircle(
                     color = color,
                     radius = 5.dp.toPx(),
+                    center = Offset(transformedX, transformedY)
+                )
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawHandLandmarks(pose: Pose, color: Color, scaleX: Float, scaleY: Float, previewWidth: Float, previewHeight: Float) {
+    val handLandmarks = listOf(
+        PoseLandmark.LEFT_WRIST,
+        PoseLandmark.RIGHT_WRIST
+    )
+    
+    handLandmarks.forEach { landmarkType ->
+        pose.getPoseLandmark(landmarkType)?.let { landmark ->
+            if (landmark.inFrameLikelihood > 0.5f) {
+                // Transform coordinates and mirror for front-facing camera
+                val transformedX = (size.width - landmark.position.x * scaleX)
+                val transformedY = landmark.position.y * scaleY
+                
+                drawCircle(
+                    color = color,
+                    radius = 10.dp.toPx(),
                     center = Offset(transformedX, transformedY)
                 )
             }

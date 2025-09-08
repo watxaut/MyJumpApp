@@ -14,6 +14,7 @@ import com.watxaut.myjumpapp.data.repository.UserRepository
 import com.watxaut.myjumpapp.domain.jump.JumpDetector
 import com.watxaut.myjumpapp.domain.jump.DebugInfo
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import com.watxaut.myjumpapp.utils.WakeLockManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,6 +37,9 @@ data class JumpSessionUiState(
     val maxSpikeReachUpperBound: Double = 0.0,
     val hasEyeToHeadMeasurement: Boolean = false,
     val surfaceType: SurfaceType = SurfaceType.HARD_FLOOR,
+    val jumpType: JumpType = JumpType.STATIC,
+    val maxHandReach: Double = 0.0,
+    val theoreticalSpikeReach: Double = 0.0,
     val debugInfo: DebugInfo = DebugInfo(),
     val error: String? = null
 )
@@ -74,6 +78,8 @@ class JumpSessionViewModel @Inject constructor(
                         maxSpikeReachLowerBound = jumpData.maxSpikeReachLowerBound,
                         maxSpikeReachUpperBound = jumpData.maxSpikeReachUpperBound,
                         hasEyeToHeadMeasurement = jumpData.hasEyeToHeadMeasurement,
+                        maxHandReach = jumpData.maxHandReach,
+                        theoreticalSpikeReach = jumpData.theoreticalSpikeReach,
                         isCalibrating = isNowCalibrating,
                         debugInfo = jumpData.debugInfo
                     )
@@ -96,14 +102,14 @@ class JumpSessionViewModel @Inject constructor(
                         }
                     }
                     
-                    startSession(_uiState.value.userId!!, _uiState.value.surfaceType)
+                    startSession(_uiState.value.userId!!, _uiState.value.surfaceType, _uiState.value.jumpType)
                 }
                 
             }
         }
     }
     
-    fun startSession(userId: String, surfaceType: SurfaceType = SurfaceType.HARD_FLOOR) {
+    fun startSession(userId: String, surfaceType: SurfaceType = SurfaceType.HARD_FLOOR, jumpType: JumpType = JumpType.STATIC) {
         Log.i("JumpSessionViewModel", "Starting session for user: $userId")
         viewModelScope.launch {
             try {
@@ -118,9 +124,10 @@ class JumpSessionViewModel @Inject constructor(
                 // Create new session
                 val session = JumpSession(
                     userId = userId,
-                    sessionName = "${surfaceType.displayName} Session ${System.currentTimeMillis()}",
+                    sessionName = "${jumpType.displayName} ${surfaceType.displayName} Session ${System.currentTimeMillis()}",
                     startTime = System.currentTimeMillis(),
                     surfaceType = surfaceType,
+                    jumpType = jumpType,
                     isCompleted = false
                 )
                 Log.i("JumpSessionViewModel", "Created session: ${session.sessionId}")
@@ -142,6 +149,7 @@ class JumpSessionViewModel @Inject constructor(
                         userName = user.userName,
                         currentSessionId = session.sessionId,
                         surfaceType = surfaceType,
+                        jumpType = jumpType,
                         sessionDuration = 0L,
                         isCalibrating = true,
                         error = null
@@ -171,6 +179,8 @@ class JumpSessionViewModel @Inject constructor(
                     totalJumps = 1, // Each session counts as 1 jump
                     bestJumpHeight = currentState.maxHeight,
                     averageJumpHeight = currentState.maxHeight,
+                    handReachHeight = currentState.maxHandReach,
+                    theoreticalSpikeReach = currentState.theoreticalSpikeReach,
                     isCompleted = true
                 )
                 
@@ -289,6 +299,13 @@ class JumpSessionViewModel @Inject constructor(
     fun setSurfaceType(surfaceType: SurfaceType) {
         _uiState.update {
             it.copy(surfaceType = surfaceType)
+        }
+    }
+    
+    fun setJumpType(jumpType: JumpType) {
+        jumpDetector.setJumpType(jumpType)
+        _uiState.update {
+            it.copy(jumpType = jumpType)
         }
     }
     

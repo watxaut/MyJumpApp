@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.watxaut.myjumpapp.domain.jump.DebugInfo
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import com.watxaut.myjumpapp.presentation.ui.components.CameraPermissionHandler
 import com.watxaut.myjumpapp.presentation.ui.components.CameraPreview
 import com.watxaut.myjumpapp.presentation.ui.components.CameraSetupGuideDialog
@@ -35,6 +36,7 @@ import com.watxaut.myjumpapp.presentation.viewmodels.JumpSessionUiState
 fun CameraScreen(
     userId: String?,
     surfaceType: SurfaceType,
+    jumpType: JumpType,
     onNavigateBack: () -> Unit,
     viewModel: JumpSessionViewModel = hiltViewModel()
 ) {
@@ -42,10 +44,11 @@ fun CameraScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showSetupGuide by remember { mutableStateOf(false) }
     
-    LaunchedEffect(userId, surfaceType) {
+    LaunchedEffect(userId, surfaceType, jumpType) {
         if (userId != null) {
             viewModel.setUserId(userId)
             viewModel.setSurfaceType(surfaceType)
+            viewModel.setJumpType(jumpType)
         }
     }
     
@@ -74,7 +77,7 @@ fun CameraScreen(
                         }
                         if (uiState.userName.isNotEmpty()) {
                             Text(
-                                text = "${uiState.userName} • ${surfaceType.displayName}",
+                                text = "${uiState.userName} • ${surfaceType.displayName} • ${jumpType.displayName}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -121,6 +124,7 @@ fun CameraScreen(
                 JumpDetectionContent(
                     uiState = uiState,
                     surfaceType = surfaceType,
+                    jumpType = jumpType,
                     onShowGuide = { showSetupGuide = true },
                     onStopSession = { viewModel.stopSession() },
                     onPoseDetected = { imageProxy, pose ->
@@ -144,6 +148,7 @@ fun CameraScreen(
 private fun JumpDetectionContent(
     uiState: JumpSessionUiState,
     surfaceType: SurfaceType,
+    jumpType: JumpType,
     onShowGuide: () -> Unit,
     onStopSession: () -> Unit,
     onPoseDetected: (androidx.camera.core.ImageProxy, com.google.mlkit.vision.pose.Pose) -> Unit,
@@ -160,9 +165,10 @@ private fun JumpDetectionContent(
             }
         )
         
-        // Pose Overlay - Draw head, hips, and toes
+        // Pose Overlay - Draw head, hips, toes, and hands (for dynamic jumps)
         PoseOverlay(
-            pose = currentPose
+            pose = currentPose,
+            jumpType = jumpType
         )
         
         // Overlay UI
