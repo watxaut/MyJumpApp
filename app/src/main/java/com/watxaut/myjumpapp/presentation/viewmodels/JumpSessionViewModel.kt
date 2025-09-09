@@ -1,7 +1,6 @@
 package com.watxaut.myjumpapp.presentation.viewmodels
 
 import android.content.Context
-import android.util.Log
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,6 +15,7 @@ import com.watxaut.myjumpapp.domain.jump.DebugInfo
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
 import com.watxaut.myjumpapp.domain.jump.JumpType
 import com.watxaut.myjumpapp.utils.WakeLockManager
+import com.watxaut.myjumpapp.utils.SecureLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -67,7 +67,7 @@ class JumpSessionViewModel @Inject constructor(
                 val wasCalibrating = _uiState.value.isCalibrating
                 val isNowCalibrating = jumpData.debugInfo.calibrationProgress < jumpData.debugInfo.calibrationFramesNeeded
                 
-                Log.d("JumpSessionViewModel", "Jump data update: maxHeight=${jumpData.maxHeight}, wasCalibrating=$wasCalibrating, isNowCalibrating=$isNowCalibrating, calibrationProgress=${jumpData.debugInfo.calibrationProgress}/${jumpData.debugInfo.calibrationFramesNeeded}")
+                SecureLogger.d("JumpSessionViewModel", "Jump data update: calibration progress ${jumpData.debugInfo.calibrationProgress}/${jumpData.debugInfo.calibrationFramesNeeded}")
                 
                 _uiState.update { currentState ->
                     val newState = currentState.copy(
@@ -83,22 +83,22 @@ class JumpSessionViewModel @Inject constructor(
                         isCalibrating = isNowCalibrating,
                         debugInfo = jumpData.debugInfo
                     )
-                    Log.i("JumpSessionViewModel", "State updated: isCalibrating=${newState.isCalibrating}, maxHeight=${newState.maxHeight}, hasEyeToHead=${newState.hasEyeToHeadMeasurement}, isSessionActive=${newState.isSessionActive}")
+                    SecureLogger.i("JumpSessionViewModel", "State updated: isCalibrating=${newState.isCalibrating}, hasEyeToHead=${newState.hasEyeToHeadMeasurement}, isSessionActive=${newState.isSessionActive}")
                     newState
                 }
                 
                 // Auto-start session when calibration completes
                 if (wasCalibrating && !isNowCalibrating && _uiState.value.userId != null && !_uiState.value.isSessionActive) {
-                    Log.i("JumpSessionViewModel", "Calibration completed, auto-starting session for user: ${_uiState.value.userId}")
+                    SecureLogger.i("JumpSessionViewModel", "Calibration completed, auto-starting session")
                     
                     // Set user height for pixel-to-cm calibration
                     viewModelScope.launch {
                         val user = userRepository.getUserById(_uiState.value.userId!!)
                         if (user != null && user.heightCm != null && user.heightCm > 0) {
                             jumpDetector.setUserHeight(user.heightCm.toDouble(), user.eyeToHeadVertexCm, user.heelToHandReachCm ?: 0.0)
-                            Log.i("JumpSessionViewModel", "Set user height for calibration: ${user.heightCm}cm, eyeToHeadVertex: ${user.eyeToHeadVertexCm ?: "not provided"}, heelToHandReach: ${user.heelToHandReachCm ?: 0.0}cm")
+                            SecureLogger.i("JumpSessionViewModel", "User height set for calibration")
                         } else {
-                            Log.w("JumpSessionViewModel", "User height not available for calibration")
+                            SecureLogger.w("JumpSessionViewModel", "User height not available for calibration")
                         }
                     }
                     
@@ -110,16 +110,16 @@ class JumpSessionViewModel @Inject constructor(
     }
     
     fun startSession(userId: String, surfaceType: SurfaceType = SurfaceType.HARD_FLOOR, jumpType: JumpType = JumpType.STATIC) {
-        Log.i("JumpSessionViewModel", "Starting session for user: $userId")
+        SecureLogger.i("JumpSessionViewModel", "Starting session")
         viewModelScope.launch {
             try {
                 val user = userRepository.getUserById(userId)
                 if (user == null) {
-                    Log.e("JumpSessionViewModel", "User not found: $userId")
+                    SecureLogger.e("JumpSessionViewModel", "User not found")
                     _uiState.update { it.copy(error = "User not found") }
                     return@launch
                 }
-                Log.i("JumpSessionViewModel", "User found: ${user.userName}")
+                SecureLogger.i("JumpSessionViewModel", "User found")
                 
                 // Create new session
                 val session = JumpSession(
@@ -130,7 +130,7 @@ class JumpSessionViewModel @Inject constructor(
                     jumpType = jumpType,
                     isCompleted = false
                 )
-                Log.i("JumpSessionViewModel", "Created session: ${session.sessionId}")
+                SecureLogger.i("JumpSessionViewModel", "Session created")
                 
                 jumpSessionRepository.insertSession(session)
                 currentSession = session
@@ -138,9 +138,9 @@ class JumpSessionViewModel @Inject constructor(
                 
                 // Acquire wake lock to keep screen on during session
                 wakeLockManager.acquireWakeLock(context)
-                Log.i("JumpSessionViewModel", "Wake lock acquired")
+                SecureLogger.i("JumpSessionViewModel", "Wake lock acquired")
                 
-                Log.i("JumpSessionViewModel", "Session started with completed calibration")
+                SecureLogger.i("JumpSessionViewModel", "Session started with completed calibration")
                 
                 _uiState.update {
                     val newState = it.copy(
@@ -154,12 +154,12 @@ class JumpSessionViewModel @Inject constructor(
                         isCalibrating = true,
                         error = null
                     )
-                    Log.i("JumpSessionViewModel", "Session started - isSessionActive=${newState.isSessionActive}, isCalibrating=${newState.isCalibrating}")
+                    SecureLogger.i("JumpSessionViewModel", "Session started - isSessionActive=${newState.isSessionActive}, isCalibrating=${newState.isCalibrating}")
                     newState
                 }
                 
             } catch (exception: Exception) {
-                Log.e("JumpSessionViewModel", "Failed to start session", exception)
+                SecureLogger.e("JumpSessionViewModel", "Failed to start session", exception)
                 _uiState.update {
                     it.copy(error = exception.message ?: "Failed to start session")
                 }
@@ -260,7 +260,7 @@ class JumpSessionViewModel @Inject constructor(
     
     fun processPoseDetection(imageProxy: ImageProxy, pose: Pose) {
         val currentState = _uiState.value
-        Log.d("JumpSessionViewModel", "Processing pose - sessionActive=${currentState.isSessionActive}, isCalibrating=${currentState.isCalibrating}, landmarks=${pose.allPoseLandmarks.size}")
+        SecureLogger.d("JumpSessionViewModel", "Processing pose - sessionActive=${currentState.isSessionActive}, isCalibrating=${currentState.isCalibrating}")
         
         // Always process poses when calibrating OR when session is active
         if (currentState.isCalibrating || currentState.isSessionActive) {
@@ -273,7 +273,7 @@ class JumpSessionViewModel @Inject constructor(
                 _uiState.update { it.copy(sessionDuration = duration) }
             }
         } else {
-            Log.d("JumpSessionViewModel", "Skipping pose processing - session not active and not calibrating")
+            SecureLogger.d("JumpSessionViewModel", "Skipping pose processing - session not active and not calibrating")
         }
     }
     

@@ -29,7 +29,7 @@ object DatabaseModule {
             JumpDatabase::class.java,
             JumpDatabase.DATABASE_NAME
         ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
-        .fallbackToDestructiveMigration() // Allow destructive migration during development
+        .setJournalMode(androidx.room.RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
         .build()
     }
 

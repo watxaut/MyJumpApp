@@ -2,9 +2,9 @@ package com.watxaut.myjumpapp.presentation.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import android.util.Log
 import com.watxaut.myjumpapp.data.database.entities.User
 import com.watxaut.myjumpapp.data.repository.UserRepository
+import com.watxaut.myjumpapp.utils.SecureLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -29,17 +29,17 @@ class UserSelectionViewModel @Inject constructor(
         // Test database connectivity
         viewModelScope.launch {
             val dbTest = userRepository.testDatabaseConnection()
-            Log.d("UserSelectionVM", "Database connectivity test: $dbTest")
+            SecureLogger.d("UserSelectionVM", "Database connectivity test completed")
         }
     }
     
     private fun loadUsers() {
-        Log.d("UserSelectionVM", "Loading users...")
+        SecureLogger.d("UserSelectionVM", "Loading users...")
         viewModelScope.launch {
             try {
                 userRepository.getAllActiveUsers()
                     .catch { exception ->
-                        Log.e("UserSelectionVM", "Error loading users", exception)
+                        SecureLogger.e("UserSelectionVM", "Error loading users", exception)
                         _uiState.update { currentState ->
                             currentState.copy(
                                 isLoading = false,
@@ -48,7 +48,7 @@ class UserSelectionViewModel @Inject constructor(
                         }
                     }
                     .collect { users ->
-                        Log.d("UserSelectionVM", "Loaded ${users.size} users: ${users.map { it.userName }}")
+                        SecureLogger.d("UserSelectionVM", "Loaded ${users.size} users")
                         _uiState.update { currentState ->
                             currentState.copy(
                                 users = users,
@@ -58,7 +58,7 @@ class UserSelectionViewModel @Inject constructor(
                         }
                     }
             } catch (exception: Exception) {
-                Log.e("UserSelectionVM", "Exception loading users", exception)
+                SecureLogger.e("UserSelectionVM", "Exception loading users", exception)
                 _uiState.update { currentState ->
                     currentState.copy(
                         isLoading = false,
@@ -70,7 +70,18 @@ class UserSelectionViewModel @Inject constructor(
     }
     
     fun createUser(name: String, height: Int?, weight: Double?, eyeToHeadVertexCm: Double?, heelToHandReachCm: Double?) {
-        Log.d("UserSelectionVM", "Creating user: $name, height: $height, weight: $weight, eyeToHead: $eyeToHeadVertexCm, heelToHand: $heelToHandReachCm")
+        SecureLogger.d("UserSelectionVM", "Creating user: ${SecureLogger.redactSensitiveData(name)}, height: ${SecureLogger.redactMeasurement(height)}, weight: ${SecureLogger.redactMeasurement(weight)}, eyeToHead: ${SecureLogger.redactMeasurement(eyeToHeadVertexCm)}, heelToHand: ${SecureLogger.redactMeasurement(heelToHandReachCm)}")
+        
+        // Input validation
+        try {
+            validateUserInput(name, height, weight, eyeToHeadVertexCm, heelToHandReachCm)
+        } catch (e: IllegalArgumentException) {
+            _uiState.update { currentState ->
+                currentState.copy(error = e.message)
+            }
+            return
+        }
+        
         viewModelScope.launch {
             try {
                 val user = User(
@@ -80,12 +91,12 @@ class UserSelectionViewModel @Inject constructor(
                     eyeToHeadVertexCm = eyeToHeadVertexCm,
                     heelToHandReachCm = heelToHandReachCm
                 )
-                Log.d("UserSelectionVM", "User object created: $user")
+                SecureLogger.d("UserSelectionVM", "User object created successfully")
                 userRepository.insertUser(user)
-                Log.d("UserSelectionVM", "User inserted successfully")
+                SecureLogger.d("UserSelectionVM", "User inserted successfully")
                 // Users list will be automatically updated via Flow
             } catch (exception: Exception) {
-                Log.e("UserSelectionVM", "Failed to create user", exception)
+                SecureLogger.e("UserSelectionVM", "Failed to create user", exception)
                 _uiState.update { currentState ->
                     currentState.copy(
                         error = exception.message ?: "Failed to create user"
@@ -113,5 +124,48 @@ class UserSelectionViewModel @Inject constructor(
     fun selectUser(userId: String) {
         // This could be used to navigate or store selection
         // For now, it's handled by the calling screen
+    }
+    
+    private fun validateUserInput(
+        name: String,
+        height: Int?,
+        weight: Double?,
+        eyeToHeadVertexCm: Double?,
+        heelToHandReachCm: Double?
+    ) {
+        // Validate name
+        if (name.isBlank()) {
+            throw IllegalArgumentException("Name cannot be empty")
+        }
+        if (name.length > 50) {
+            throw IllegalArgumentException("Name must be 50 characters or less")
+        }
+        
+        // Validate height (reasonable human range)
+        height?.let { 
+            if (it < 100 || it > 250) {
+                throw IllegalArgumentException("Height must be between 100-250 cm")
+            }
+        }
+        
+        // Validate weight (reasonable human range)
+        weight?.let {
+            if (it < 20.0 || it > 500.0) {
+                throw IllegalArgumentException("Weight must be between 20-500 kg")
+            }
+        }
+        
+        // Validate biometric measurements
+        eyeToHeadVertexCm?.let {
+            if (it < 0 || it > 30) {
+                throw IllegalArgumentException("Eye-to-head distance must be between 0-30 cm")
+            }
+        }
+        
+        heelToHandReachCm?.let {
+            if (it < 150 || it > 300) {
+                throw IllegalArgumentException("Heel-to-hand reach must be between 150-300 cm")
+            }
+        }
     }
 }

@@ -1,7 +1,7 @@
 package com.watxaut.myjumpapp.domain.jump
 
-import android.util.Log
 import com.google.mlkit.vision.pose.Pose
+import com.watxaut.myjumpapp.utils.SecureLogger
 import com.google.mlkit.vision.pose.PoseLandmark
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,6 +77,9 @@ class JumpDetector @Inject constructor() {
     @Volatile
     private var frameCount = 0
     @Volatile
+    private var logCounter = 0
+    private val logInterval = 30 // Log every 30 frames (once per second at 30fps)
+    @Volatile
     private var jumpType: JumpType = JumpType.STATIC
     private var calibrationFrames = 60 // Frames to establish baseline
     
@@ -122,16 +125,16 @@ class JumpDetector @Inject constructor() {
             pose.allPoseLandmarks.map { it.inFrameLikelihood }.average().toFloat()
         } else 0f
         
-        Log.d("JumpDetector", "Processing pose - landmarks: $landmarksCount, confidence: $confidenceScore")
+        debugLog("JumpDetector", "Processing pose - landmarks: $landmarksCount, confidence: ${String.format("%.2f", confidenceScore)}")
         
         val currentHipY = calculateHipCenterY(pose)
         val currentHipZ = calculateHipCenterZ(pose)
         val currentHandY = if (jumpType == JumpType.DYNAMIC) calculateHandCenterY(pose) else null
         
-        Log.d("JumpDetector", "Hip Y calculation result: $currentHipY, frameCount: $frameCount, isCalibrated: $isCalibrated")
-        Log.d("JumpDetector", "Hip Z calculation result: $currentHipZ")
+        debugLog("JumpDetector", "Hip Y: $currentHipY, frameCount: $frameCount, isCalibrated: $isCalibrated")
+        debugLog("JumpDetector", "Hip Z: $currentHipZ")
         if (jumpType == JumpType.DYNAMIC) {
-            Log.d("JumpDetector", "Hand Y calculation result: $currentHandY")
+            debugLog("JumpDetector", "Hand Y: $currentHandY")
         }
         
         // Check movement stability before calibration
@@ -228,10 +231,10 @@ class JumpDetector @Inject constructor() {
         _jumpData.value = _jumpData.value.copy(debugInfo = debugInfo)
         
         if (currentHipY == null) {
-            Log.d("JumpDetector", "Hip Y calculation returned null - missing required landmarks, cannot calibrate")
+            SecureLogger.d("JumpDetector", "Hip Y calculation returned null - missing required landmarks")
             // Only reset if person is completely gone (no landmarks detected at all)
             if (frameCount > 0 && pose.allPoseLandmarks.isEmpty()) {
-                Log.d("JumpDetector", "No person detected - resetting calibration progress")
+                SecureLogger.d("JumpDetector", "No person detected - resetting calibration progress")
                 resetCalibration()
             }
             return
@@ -256,7 +259,7 @@ class JumpDetector @Inject constructor() {
         // Anti-false-positive filtering for calibrated state
         val (isValidMovement, _) = isValidJumpMovement(smoothedHipY, currentDepth)
         if (!isValidMovement) {
-            Log.d("JumpDetector", "Invalid movement detected - ignoring frame")
+            SecureLogger.d("JumpDetector", "Invalid movement detected - ignoring frame")
             return
         }
         
@@ -279,7 +282,7 @@ class JumpDetector @Inject constructor() {
             val maxSpikeReachLowerBound = maxLowerBound + heelToHandReachCm
             val maxSpikeReachUpperBound = maxUpperBound + heelToHandReachCm
             
-            Log.d("JumpDetector", "New max height reached: ${String.format("%.1f", maxHeightCm)}cm" + 
+            SecureLogger.d("JumpDetector", "New max height: ${String.format("%.1f", maxHeightCm)}cm" + 
                   (if (eyeToHeadVertexCm == null && userHeightCm > 0) 
                       " (${String.format("%.1f", maxLowerBound)} - ${String.format("%.1f", maxUpperBound)}cm)" 
                   else "") +
@@ -307,7 +310,7 @@ class JumpDetector @Inject constructor() {
                 // This is different from static jumps which use hip tracking
                 val theoreticalSpikeReach = maxHandReachCm + heelToHandReachCm
                 
-                Log.d("JumpDetector", "New max hand reach: ${String.format("%.1f", maxHandReachCm)}cm | Theoretical spike reach: ${String.format("%.1f", theoreticalSpikeReach)}cm")
+                SecureLogger.d("JumpDetector", "Max hand reach: ${String.format("%.1f", maxHandReachCm)}cm | Theoretical spike: ${String.format("%.1f", theoreticalSpikeReach)}cm")
                 
                 // Update jump data with new maximum hand reach
                 _jumpData.value = _jumpData.value.copy(
@@ -320,7 +323,7 @@ class JumpDetector @Inject constructor() {
     
     private fun calibrateBaseline(height: Double, depth: Double, pose: Pose) {
         frameCount++
-        Log.i("JumpDetector", "Calibration frame $frameCount/$calibrationFrames - height: $height")
+        debugLog("JumpDetector", "Calibration frame $frameCount/$calibrationFrames - height: $height")
         
         if (frameCount <= calibrationFrames) {
             baselineHeight = ((baselineHeight * (frameCount - 1)) + height) / frameCount
@@ -331,12 +334,12 @@ class JumpDetector @Inject constructor() {
                 val handY = calculateHandCenterY(pose)
                 if (handY != null) {
                     baselineHandHeight = ((baselineHandHeight * (frameCount - 1)) + handY) / frameCount
-                    Log.i("JumpDetector", "Updated baseline height: $baselineHeight, depth: $baselineDepth, hand: $baselineHandHeight")
+                    SecureLogger.i("JumpDetector", "Updated baseline - height: $baselineHeight, depth: $baselineDepth, hand: $baselineHandHeight")
                 } else {
-                    Log.i("JumpDetector", "Updated baseline height: $baselineHeight, depth: $baselineDepth, hand: null")
+                    SecureLogger.i("JumpDetector", "Updated baseline - height: $baselineHeight, depth: $baselineDepth, hand: null")
                 }
             } else {
-                Log.i("JumpDetector", "Updated baseline height: $baselineHeight, depth: $baselineDepth")
+                SecureLogger.i("JumpDetector", "Updated baseline - height: $baselineHeight, depth: $baselineDepth")
             }
             
             // Collect full body pixel heights in the last half of calibration (frames 31-60)
@@ -348,7 +351,7 @@ class JumpDetector @Inject constructor() {
                     while (fullBodyPixelHeights.size > maxFullBodyPixelHeightsSize) {
                         fullBodyPixelHeights.removeFirst()
                     }
-                    Log.d("JumpDetector", "Collected full body pixel height: $fullBodyPixelHeight (frame $frameCount)")
+                    debugLog("JumpDetector", "Full body pixel height: $fullBodyPixelHeight (frame $frameCount)")
                 }
             }
         } else {
@@ -357,9 +360,9 @@ class JumpDetector @Inject constructor() {
                 val averagePixelHeight = fullBodyPixelHeights.average()
                 // This will be updated when user height is provided
                 pixelToCmRatio = 1.0
-                Log.i("JumpDetector", "Pixel-to-cm ratio calculated: $pixelToCmRatio (avgPixelHeight: $averagePixelHeight)")
+                SecureLogger.i("JumpDetector", "Pixel-to-cm ratio: $pixelToCmRatio (avg: $averagePixelHeight)")
             } else {
-                Log.w("JumpDetector", "No full body measurements collected, using default ratio")
+                SecureLogger.w("JumpDetector", "No full body measurements, using default ratio")
                 pixelToCmRatio = 1.0
             }
             
@@ -368,7 +371,7 @@ class JumpDetector @Inject constructor() {
             if (jumpType == JumpType.DYNAMIC) {
                 maxHandReached = baselineHandHeight // Initialize max hand reach to baseline
             }
-            Log.i("JumpDetector", "Calibration completed! Final baseline height: $baselineHeight, hand: $baselineHandHeight, pixel-to-cm ratio: $pixelToCmRatio")
+            SecureLogger.i("JumpDetector", "Calibration completed! baseline: $baselineHeight, hand: $baselineHandHeight, ratio: $pixelToCmRatio")
         }
     }
     
@@ -382,17 +385,17 @@ class JumpDetector @Inject constructor() {
         val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
         val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
         
-        Log.d("JumpDetector", "Required landmarks - leftHip: ${leftHip != null}, rightHip: ${rightHip != null}")
+        debugLog("JumpDetector", "Required landmarks - leftHip: ${leftHip != null}, rightHip: ${rightHip != null}")
         
         if (leftHip == null || rightHip == null) {
-            Log.w("JumpDetector", "Missing hip landmarks for height calculation")
+            SecureLogger.w("JumpDetector", "Missing hip landmarks for height calculation")
             return null
         }
         
         // Calculate center point of hips - this is our primary tracking point
         val hipCenterY = (leftHip.position.y + rightHip.position.y) / 2
         
-        Log.d("JumpDetector", "Hip center Y: $hipCenterY (leftHip: ${leftHip.position.y}, rightHip: ${rightHip.position.y})")
+        debugLog("JumpDetector", "Hip center Y: $hipCenterY (leftHip: ${leftHip.position.y}, rightHip: ${rightHip.position.y})")
         
         return hipCenterY.toDouble()
     }
@@ -402,25 +405,25 @@ class JumpDetector @Inject constructor() {
         val leftWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
         val rightWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
         
-        Log.d("JumpDetector", "Hand landmarks - leftWrist: ${leftWrist != null}, rightWrist: ${rightWrist != null}")
+        debugLog("JumpDetector", "Hand landmarks - leftWrist: ${leftWrist != null}, rightWrist: ${rightWrist != null}")
         
         // Use the higher hand (lower Y value since Y increases downward)
         return when {
             leftWrist != null && rightWrist != null -> {
                 val higherHandY = minOf(leftWrist.position.y, rightWrist.position.y)
-                Log.d("JumpDetector", "Hand center Y: $higherHandY (leftWrist: ${leftWrist.position.y}, rightWrist: ${rightWrist.position.y})")
+                debugLog("JumpDetector", "Hand center Y: $higherHandY (leftWrist: ${leftWrist.position.y}, rightWrist: ${rightWrist.position.y})")
                 higherHandY.toDouble()
             }
             leftWrist != null -> {
-                Log.d("JumpDetector", "Hand center Y (left only): ${leftWrist.position.y}")
+                debugLog("JumpDetector", "Hand center Y (left only): ${leftWrist.position.y}")
                 leftWrist.position.y.toDouble()
             }
             rightWrist != null -> {
-                Log.d("JumpDetector", "Hand center Y (right only): ${rightWrist.position.y}")
+                debugLog("JumpDetector", "Hand center Y (right only): ${rightWrist.position.y}")
                 rightWrist.position.y.toDouble()
             }
             else -> {
-                Log.w("JumpDetector", "Missing wrist landmarks for hand tracking")
+                SecureLogger.w("JumpDetector", "Missing wrist landmarks for hand tracking")
                 null
             }
         }
@@ -437,7 +440,7 @@ class JumpDetector @Inject constructor() {
         // Calculate center point of hips depth (Z coordinate)
         val hipCenterZ = (leftHip.position3D.z + rightHip.position3D.z) / 2
         
-        Log.d("JumpDetector", "Hip center Z: $hipCenterZ (leftHip: ${leftHip.position3D.z}, rightHip: ${rightHip.position3D.z})")
+        debugLog("JumpDetector", "Hip center Z: $hipCenterZ (leftHip: ${leftHip.position3D.z}, rightHip: ${rightHip.position3D.z})")
         
         return hipCenterZ.toDouble()
     }
@@ -451,7 +454,7 @@ class JumpDetector @Inject constructor() {
         val rightHeel = pose.getPoseLandmark(PoseLandmark.RIGHT_HEEL)
         
         if (leftEye == null || rightEye == null || leftHeel == null || rightHeel == null) {
-            Log.w("JumpDetector", "Missing landmarks for full body height calculation")
+            SecureLogger.w("JumpDetector", "Missing landmarks for full body height calculation")
             return null
         }
         
@@ -462,7 +465,7 @@ class JumpDetector @Inject constructor() {
         // Calculate eye-to-heel pixel distance
         val fullBodyPixelHeight = (heelCenterY - eyeCenterY).toDouble()
         
-        Log.d("JumpDetector", "Full body pixel height: $fullBodyPixelHeight (eyeY: $eyeCenterY, heelY: $heelCenterY)")
+        debugLog("JumpDetector", "Full body pixel height: $fullBodyPixelHeight (eyeY: $eyeCenterY, heelY: $heelCenterY)")
         
         return fullBodyPixelHeight
     }
@@ -520,7 +523,7 @@ class JumpDetector @Inject constructor() {
         landmarkNames.forEach { (landmarkType, name) ->
             val landmark = pose.getPoseLandmark(landmarkType)
             val confidence = landmark?.inFrameLikelihood ?: 0f
-            Log.d("JumpDetector", "$name: ${String.format("%.3f", confidence)} ${if (confidence > confidenceThreshold) "✓" else "✗"}")
+            debugLog("JumpDetector", "$name: ${String.format("%.3f", confidence)} ${if (confidence > confidenceThreshold) "✓" else "✗"}")
         }
         
         // Check if ALL landmarks are visible with confidence > 0.95
@@ -536,15 +539,15 @@ class JumpDetector @Inject constructor() {
             confidence > confidenceThreshold
         }
         
-        Log.d("JumpDetector", "=== FULL BODY CHECK (confidence > 0.95) ===")
-        Log.d("JumpDetector", "Visible landmarks: $visibleLandmarksCount/${allLandmarkNames.size}")
-        Log.d("JumpDetector", "All landmarks visible: $allLandmarksVisible")
+        debugLog("JumpDetector", "=== FULL BODY CHECK (confidence > 0.95) ===")
+        debugLog("JumpDetector", "Visible landmarks: $visibleLandmarksCount/${allLandmarkNames.size}")
+        debugLog("JumpDetector", "All landmarks visible: $allLandmarksVisible")
         
         if (!allLandmarksVisible) {
-            Log.d("JumpDetector", "Not all landmarks visible with sufficient confidence (>0.95) - cannot start calibration")
+            SecureLogger.d("JumpDetector", "Not all landmarks visible with sufficient confidence")
         }
         else {
-            Log.i("JumpDetector", "All landmarks visible with sufficient confidence (>0.95) - ready for calibration!")
+            SecureLogger.i("JumpDetector", "All landmarks visible - ready for calibration!")
         }
         
         return allLandmarksVisible
@@ -552,7 +555,7 @@ class JumpDetector @Inject constructor() {
     
     fun setJumpType(jumpType: JumpType) {
         this.jumpType = jumpType
-        Log.i("JumpDetector", "Jump type set to: ${jumpType.displayName}")
+        SecureLogger.i("JumpDetector", "Jump type set to: ${jumpType.displayName}")
     }
     
     fun setUserHeight(userHeightCm: Double, eyeToHeadVertexCm: Double? = null, heelToHandReachCm: Double = 0.0) {
@@ -571,9 +574,9 @@ class JumpDetector @Inject constructor() {
             }
             
             pixelToCmRatio = averagePixelHeight / eyeToHeelHeightCm
-            Log.i("JumpDetector", "Updated pixel-to-cm ratio: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToHeel: ${eyeToHeelHeightCm}cm, avgPixelHeight: $averagePixelHeight, eyeToHeadVertex: ${eyeToHeadVertexCm ?: "not provided"}, heelToHandReach: ${heelToHandReachCm}cm)")
+            SecureLogger.i("JumpDetector", "Updated pixel-to-cm ratio: $pixelToCmRatio (userHeight: ${userHeightCm}cm, eyeToHeel: ${eyeToHeelHeightCm}cm)")
         } else {
-            Log.w("JumpDetector", "Cannot set pixel-to-cm ratio: no full body measurements available")
+            SecureLogger.w("JumpDetector", "Cannot set pixel-to-cm ratio: no measurements available")
         }
     }
     
@@ -638,20 +641,20 @@ class JumpDetector @Inject constructor() {
                 // Just became stable - start the timer
                 stabilityStartTime = currentTime
                 isStable = true
-                Log.d("JumpDetector", "Movement became stable - starting stability timer")
+                debugLog("JumpDetector", "Movement became stable - starting stability timer")
             }
             
             val timeStable = currentTime - stabilityStartTime
             val progress = (timeStable.toFloat() / stabilityRequiredMs.toFloat()).coerceAtMost(1.0f)
             val isStableEnough = timeStable >= stabilityRequiredMs
             
-            Log.d("JumpDetector", "Stable for ${timeStable}ms (${String.format("%.1f", progress * 100)}%) - Y var: ${String.format("%.1f", maxYVariation)}, Z var: ${String.format("%.1f", maxZVariation)}")
+            debugLog("JumpDetector", "Stable for ${timeStable}ms (${String.format("%.1f", progress * 100)}%) - Y var: ${String.format("%.1f", maxYVariation)}, Z var: ${String.format("%.1f", maxZVariation)}")
             
             return Pair(isStableEnough, 0.5f + progress * 0.5f) // 50% for initial detection, 50% for time
         } else {
             // Lost stability - reset timer
             if (isStable) {
-                Log.d("JumpDetector", "Movement stability lost - resetting timer. Y var: ${String.format("%.1f", maxYVariation)}, Z var: ${String.format("%.1f", maxZVariation)}")
+                debugLog("JumpDetector", "Movement stability lost - resetting timer. Y var: ${String.format("%.1f", maxYVariation)}, Z var: ${String.format("%.1f", maxZVariation)}")
             }
             isStable = false
             stabilityStartTime = 0
@@ -678,7 +681,7 @@ class JumpDetector @Inject constructor() {
             val depthVariation = abs(hipZ - averageDepth)
             
             if (depthVariation > depthThreshold) {
-                Log.d("JumpDetector", "Depth variation too high: ${String.format("%.1f", depthVariation)} > $depthThreshold - person likely approaching/moving away")
+                debugLog("JumpDetector", "Depth variation too high: ${String.format("%.1f", depthVariation)} > $depthThreshold")
                 return Pair(false, "Move back to original position")
             }
         }
@@ -686,7 +689,7 @@ class JumpDetector @Inject constructor() {
         // Method 2: Baseline depth comparison - person should stay at roughly same depth as during calibration  
         val depthDifference = abs(hipZ - baselineDepth)
         if (depthDifference > depthThreshold) {
-            Log.d("JumpDetector", "Depth changed significantly from baseline: ${String.format("%.1f", depthDifference)} > $depthThreshold")
+            debugLog("JumpDetector", "Depth changed significantly: ${String.format("%.1f", depthDifference)} > $depthThreshold")
             return Pair(false, "Return to original position for accurate tracking")
         }
         
@@ -694,7 +697,7 @@ class JumpDetector @Inject constructor() {
         if (averageDepth != 0.0) {
             val avgDepthDifference = abs(hipZ - averageDepth)
             if (avgDepthDifference > depthThreshold * 0.7) { // Slightly more lenient than individual frame
-                Log.d("JumpDetector", "Average depth difference too high: ${String.format("%.1f", avgDepthDifference)} > ${depthThreshold * 0.7}")
+                debugLog("JumpDetector", "Average depth difference too high: ${String.format("%.1f", avgDepthDifference)} > ${depthThreshold * 0.7}")
                 return Pair(false, "Step back to your starting position")
             }
         }
@@ -724,5 +727,12 @@ class JumpDetector @Inject constructor() {
 
     fun getLastJumpData(): JumpData {
         return _jumpData.value
+    }
+    
+    private fun debugLog(tag: String, message: String) {
+        logCounter++
+        if (logCounter % logInterval == 0) {
+            SecureLogger.d(tag, message)
+        }
     }
 }
