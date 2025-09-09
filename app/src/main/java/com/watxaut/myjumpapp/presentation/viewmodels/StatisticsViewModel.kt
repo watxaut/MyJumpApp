@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.watxaut.myjumpapp.data.repository.StatisticsRepository
 import com.watxaut.myjumpapp.domain.statistics.*
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -15,6 +16,7 @@ data class StatisticsUiState(
     val dashboardStats: DashboardStats? = null,
     val selectedTimePeriod: TimePeriod = TimePeriod.LAST_7_DAYS,
     val selectedStatisticType: StatisticType = StatisticType.HEIGHT,
+    val selectedJumpType: JumpType? = null, // null means all jump types
     val error: String? = null
 )
 
@@ -96,6 +98,10 @@ class StatisticsViewModel @Inject constructor(
 
     fun setStatisticType(type: StatisticType) {
         _uiState.update { it.copy(selectedStatisticType = type) }
+    }
+
+    fun setJumpType(jumpType: JumpType?) {
+        _uiState.update { it.copy(selectedJumpType = jumpType) }
     }
 
     fun clearError() {
@@ -209,5 +215,49 @@ class StatisticsViewModel @Inject constructor(
             ?.sortedBy { it.targetValue }
             ?.take(3)
             ?: emptyList()
+    }
+
+    // Jump type filtering functions
+    fun getJumpTypeSpecificStats(): JumpTypeSpecificStats? {
+        val jumpTypeStats = _uiState.value.userStatistics?.jumpTypeStats ?: return null
+        val selectedJumpType = _uiState.value.selectedJumpType ?: return null
+        
+        return when (selectedJumpType) {
+            JumpType.STATIC -> jumpTypeStats.staticStats
+            JumpType.DYNAMIC -> jumpTypeStats.dynamicStats
+        }
+    }
+
+    fun getFilteredQuickStats(): QuickStats? {
+        val dashboardStats = _uiState.value.dashboardStats ?: return null
+        val selectedJumpType = _uiState.value.selectedJumpType
+        
+        // If no jump type filter, return original quick stats
+        if (selectedJumpType == null) {
+            return dashboardStats.quickStats
+        }
+        
+        // Filter by jump type using jumpTypeBreakdown
+        val jumpTypeBreakdown = dashboardStats.jumpTypeBreakdown
+        return when (selectedJumpType) {
+            JumpType.STATIC -> QuickStats(
+                totalJumps = jumpTypeBreakdown.staticCount,
+                currentStreak = dashboardStats.quickStats.currentStreak, // Can't filter streaks easily
+                personalBest = jumpTypeBreakdown.staticBestHeight,
+                personalBestSpikeReach = 0.0, // Would need more detailed data
+                last7DaysJumps = 0 // Would need more detailed filtering
+            )
+            JumpType.DYNAMIC -> QuickStats(
+                totalJumps = jumpTypeBreakdown.dynamicCount,
+                currentStreak = dashboardStats.quickStats.currentStreak, // Can't filter streaks easily
+                personalBest = jumpTypeBreakdown.dynamicBestHeight,
+                personalBestSpikeReach = 0.0, // Would need more detailed data
+                last7DaysJumps = 0 // Would need more detailed filtering
+            )
+        }
+    }
+
+    fun getCombinedPerformanceData(): CombinedFilteredStats? {
+        return _uiState.value.userStatistics?.combinedStats
     }
 }

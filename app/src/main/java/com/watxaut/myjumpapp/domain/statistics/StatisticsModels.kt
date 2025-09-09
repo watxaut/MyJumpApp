@@ -1,6 +1,7 @@
 package com.watxaut.myjumpapp.domain.statistics
 
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -11,7 +12,9 @@ data class UserStatistics(
     val recentStats: RecentStats,
     val progressStats: ProgressStats,
     val achievementStats: AchievementStats,
-    val surfaceStats: SurfaceFilteredStats
+    val surfaceStats: SurfaceFilteredStats,
+    val jumpTypeStats: JumpTypeFilteredStats,
+    val combinedStats: CombinedFilteredStats
 )
 
 data class OverallStats(
@@ -148,7 +151,17 @@ data class DashboardStats(
     val todayStats: DayStats,
     val weekStats: WeekStats,
     val quickStats: QuickStats,
-    val recentSessions: List<SessionSummary>
+    val recentSessions: List<SessionSummary>,
+    val jumpTypeBreakdown: JumpTypeBreakdown
+)
+
+data class JumpTypeBreakdown(
+    val staticCount: Int,
+    val dynamicCount: Int,
+    val staticBestHeight: Double,
+    val dynamicBestHeight: Double,
+    val staticAverageHeight: Double,
+    val dynamicAverageHeight: Double
 )
 
 data class DayStats(
@@ -238,4 +251,77 @@ data class SurfaceComparison(
     val spikeReachDifferencePercent: Double, // % difference between hard floor and sand spike reach
     val preferredSurface: SurfaceType?, // Surface with more sessions
     val sessionRatio: Double // Ratio of hard floor to sand sessions
+)
+
+// Jump Type specific statistics
+data class JumpTypeFilteredStats(
+    val staticStats: JumpTypeSpecificStats,
+    val dynamicStats: JumpTypeSpecificStats,
+    val comparison: JumpTypeComparison
+)
+
+data class JumpTypeSpecificStats(
+    val jumpType: JumpType,
+    val totalSessions: Int,
+    val bestHeight: Double,
+    val averageHeight: Double,
+    val bestSpikeReach: Double,
+    val averageSpikeReach: Double,
+    val last7DaysSessions: Int,
+    val last30DaysSessions: Int,
+    val firstSessionDate: LocalDateTime?,
+    val lastSessionDate: LocalDateTime?
+)
+
+data class JumpTypeComparison(
+    val heightDifferencePercent: Double, // % difference between static and dynamic
+    val spikeReachDifferencePercent: Double, // % difference between static and dynamic spike reach
+    val preferredJumpType: JumpType?, // Jump type with more sessions
+    val sessionRatio: Double // Ratio of static to dynamic sessions
+)
+
+// Combined Surface + Jump Type statistics
+data class CombinedFilteredStats(
+    val hardFloorStatic: PerformanceStats,
+    val hardFloorDynamic: PerformanceStats,
+    val sandStatic: PerformanceStats,
+    val sandDynamic: PerformanceStats,
+    val comparisons: CombinedComparisons
+)
+
+data class PerformanceStats(
+    val surface: SurfaceType,
+    val jumpType: JumpType,
+    val totalSessions: Int,
+    val bestHeight: Double,
+    val averageHeight: Double,
+    val bestSpikeReach: Double,
+    val averageSpikeReach: Double,
+    val improvementPercent: Double, // vs previous period
+    val consistencyScore: Double,
+    val firstSessionDate: LocalDateTime?,
+    val lastSessionDate: LocalDateTime?
+)
+
+data class CombinedComparisons(
+    val bestCombination: CombinationResult?, // Which surface+jump type combo performs best
+    val surfaceEffectOnJumpTypes: SurfaceEffectAnalysis,
+    val jumpTypeEffectOnSurfaces: JumpTypeEffectAnalysis
+)
+
+data class CombinationResult(
+    val surface: SurfaceType,
+    val jumpType: JumpType,
+    val averageHeight: Double,
+    val sessionCount: Int
+)
+
+data class SurfaceEffectAnalysis(
+    val staticJumpDifference: Double, // % difference hard floor vs sand for static jumps
+    val dynamicJumpDifference: Double // % difference hard floor vs sand for dynamic jumps
+)
+
+data class JumpTypeEffectAnalysis(
+    val hardFloorDifference: Double, // % difference static vs dynamic on hard floor
+    val sandDifference: Double // % difference static vs dynamic on sand
 )

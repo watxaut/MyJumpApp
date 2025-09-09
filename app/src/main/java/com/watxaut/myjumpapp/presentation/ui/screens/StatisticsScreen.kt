@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.watxaut.myjumpapp.domain.statistics.*
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import com.watxaut.myjumpapp.presentation.viewmodels.StatisticsViewModel
 import java.time.format.DateTimeFormatter
 
@@ -86,9 +87,8 @@ fun StatisticsScreen(
                     .padding(paddingValues)
             ) {
                 // Tab Row
-                ScrollableTabRow(
-                    selectedTabIndex = selectedTab,
-                    edgePadding = 0.dp
+                TabRow(
+                    selectedTabIndex = selectedTab
                 ) {
                     Tab(
                         selected = selectedTab == 0,
@@ -106,7 +106,7 @@ fun StatisticsScreen(
                         onClick = { selectedTab = 1 },
                         text = { 
                             Text(
-                                text = "Progress",
+                                text = "Performance",
                                 maxLines = 1,
                                 style = MaterialTheme.typography.labelMedium
                             ) 
@@ -115,28 +115,6 @@ fun StatisticsScreen(
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        text = { 
-                            Text(
-                                text = "Records",
-                                maxLines = 1,
-                                style = MaterialTheme.typography.labelMedium
-                            ) 
-                        }
-                    )
-                    Tab(
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
-                        text = { 
-                            Text(
-                                text = "Surfaces",
-                                maxLines = 1,
-                                style = MaterialTheme.typography.labelMedium
-                            ) 
-                        }
-                    )
-                    Tab(
-                        selected = selectedTab == 4,
-                        onClick = { selectedTab = 4 },
                         text = { 
                             Text(
                                 text = "Achievements",
@@ -151,20 +129,14 @@ fun StatisticsScreen(
                 when (selectedTab) {
                     0 -> OverviewTab(
                         statistics = uiState.userStatistics!!,
-                        dashboardStats = uiState.dashboardStats
+                        dashboardStats = uiState.dashboardStats,
+                        viewModel = viewModel
                     )
-                    1 -> ProgressTab(
+                    1 -> PerformanceTab(
                         statistics = uiState.userStatistics!!,
                         viewModel = viewModel
                     )
-                    2 -> RecordsTab(
-                        statistics = uiState.userStatistics!!,
-                        viewModel = viewModel
-                    )
-                    3 -> SurfacesTab(
-                        statistics = uiState.userStatistics!!
-                    )
-                    4 -> AchievementsTab(
+                    2 -> AchievementsTab(
                         statistics = uiState.userStatistics!!,
                         viewModel = viewModel
                     )
@@ -181,35 +153,93 @@ fun StatisticsScreen(
 @Composable
 private fun OverviewTab(
     statistics: UserStatistics,
-    dashboardStats: DashboardStats?
+    dashboardStats: DashboardStats?,
+    viewModel: StatisticsViewModel
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+    var selectedJumpType by remember { mutableStateOf<JumpType?>(null) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Quick Stats Cards
+        // Jump Type Filter
         item {
             Text(
-                text = "Quick Stats",
+                text = "Filter by Jump Type",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    FilterChip(
+                        onClick = { selectedJumpType = null },
+                        label = { Text("All Types") },
+                        selected = selectedJumpType == null
+                    )
+                }
+                items(JumpType.values()) { jumpType ->
+                    FilterChip(
+                        onClick = { selectedJumpType = jumpType },
+                        label = { 
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(jumpType.icon)
+                                Text(jumpType.displayName)
+                            }
+                        },
+                        selected = selectedJumpType == jumpType
+                    )
+                }
+            }
+        }
+
+        // Quick Stats Cards
+        item {
+            val jumpTypeFilter = selectedJumpType // Store in local variable to avoid smart cast issues
+            Text(
+                text = if (jumpTypeFilter != null) "${jumpTypeFilter.icon} ${jumpTypeFilter.displayName} Stats" else "Quick Stats",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
+            
+            // Get filtered stats based on selected jump type
+            val displayStats = when (jumpTypeFilter) {
+                JumpType.STATIC -> {
+                    val staticStats = statistics.jumpTypeStats.staticStats
+                    Triple(staticStats.totalSessions, staticStats.bestHeight, staticStats.averageHeight)
+                }
+                JumpType.DYNAMIC -> {
+                    val dynamicStats = statistics.jumpTypeStats.dynamicStats
+                    Triple(dynamicStats.totalSessions, dynamicStats.bestHeight, dynamicStats.averageHeight)
+                }
+                null -> {
+                    Triple(statistics.overallStats.totalJumps, statistics.overallStats.bestJumpHeight, statistics.overallStats.averageJumpHeight)
+                }
+            }
+            
+            val (totalJumps, bestHeight, averageHeight) = displayStats
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 QuickStatCard(
-                    title = "Total Jumps",
-                    value = "${statistics.overallStats.totalJumps}",
+                    title = if (jumpTypeFilter != null) "Total Sessions" else "Total Jumps",
+                    value = "$totalJumps",
                     icon = Icons.Default.Home,
                     modifier = Modifier.weight(1f)
                 )
                 QuickStatCard(
                     title = "Personal Best",
-                    value = "${String.format("%.1f", statistics.overallStats.bestJumpHeight)}cm",
+                    value = "${String.format("%.1f", bestHeight)}cm",
                     icon = Icons.Default.Person,
                     modifier = Modifier.weight(1f)
                 )
@@ -223,14 +253,28 @@ private fun OverviewTab(
             ) {
                 QuickStatCard(
                     title = "Average Height",
-                    value = "${String.format("%.1f", statistics.overallStats.averageJumpHeight)}cm",
+                    value = "${String.format("%.1f", averageHeight)}cm",
                     icon = Icons.Default.Info,
                     modifier = Modifier.weight(1f)
                 )
             }
             
-            // Spike Reach Section
-            if (statistics.overallStats.bestSpikeReach > 0) {
+            // Spike Reach Section - get filtered spike reach data
+            val (bestSpikeReach, averageSpikeReach) = when (jumpTypeFilter) {
+                JumpType.STATIC -> {
+                    val staticStats = statistics.jumpTypeStats.staticStats
+                    Pair(staticStats.bestSpikeReach, staticStats.averageSpikeReach)
+                }
+                JumpType.DYNAMIC -> {
+                    val dynamicStats = statistics.jumpTypeStats.dynamicStats
+                    Pair(dynamicStats.bestSpikeReach, dynamicStats.averageSpikeReach)
+                }
+                null -> {
+                    Pair(statistics.overallStats.bestSpikeReach, statistics.overallStats.averageSpikeReach)
+                }
+            }
+            
+            if (bestSpikeReach > 0) {
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 Row(
@@ -239,13 +283,13 @@ private fun OverviewTab(
                 ) {
                     QuickStatCard(
                         title = "Best Spike Reach",
-                        value = "${String.format("%.1f", statistics.overallStats.bestSpikeReach)}cm",
+                        value = "${String.format("%.1f", bestSpikeReach)}cm",
                         icon = Icons.Default.Star,
                         modifier = Modifier.weight(1f)
                     )
                     QuickStatCard(
                         title = "Avg Spike Reach",
-                        value = "${String.format("%.1f", statistics.overallStats.averageSpikeReach)}cm",
+                        value = "${String.format("%.1f", averageSpikeReach)}cm",
                         icon = Icons.Default.KeyboardArrowUp,
                         modifier = Modifier.weight(1f)
                     )
@@ -280,6 +324,29 @@ private fun OverviewTab(
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
+                    if (selectedJumpType != null) {
+                        // Show note when filtering is applied
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Recent activity shows all jump types (filtered view coming soon)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    
                     RecentStatsRow(
                         label = "Last 7 Days",
                         sessionCount = statistics.recentStats.last7Days.sessionCount,
@@ -302,7 +369,7 @@ private fun OverviewTab(
 }
 
 @Composable
-private fun ProgressTab(
+private fun PerformanceTab(
     statistics: UserStatistics,
     viewModel: StatisticsViewModel
 ) {
@@ -333,6 +400,18 @@ private fun ProgressTab(
                     )
                 }
             }
+        }
+
+        // Performance Matrix: Surface + Jump Type combinations
+        item {
+            Text(
+                text = "Performance by Surface & Jump Type",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            CombinedPerformanceMatrix(statistics.combinedStats)
         }
 
         // Height Progress Chart
@@ -367,35 +446,45 @@ private fun ProgressTab(
             }
         }
 
-        // Volume Progress
+        // Personal Records Section
         item {
-            val volumeData by remember(uiState.selectedTimePeriod, uiState.userStatistics) {
-                derivedStateOf { viewModel.getFilteredVolumeData() }
-            }
-            val volumeDataValue = volumeData
-            if (volumeDataValue != null && volumeDataValue.isNotEmpty()) {
-                Text(
-                    text = "Volume Progress",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+            Text(
+                text = "Personal Records",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            PersonalRecordsSection(statistics.achievementStats.personalRecords)
+        }
+
+        // Surface Comparison (preserved from original)
+        item {
+            Text(
+                text = "Surface Performance Analysis",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SurfaceStatsCard(
+                    surfaceStats = statistics.surfaceStats.hardFloorStats,
+                    modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Card {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Jump count over time",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        SimpleVolumeChart(volumeDataValue)
-                    }
-                }
+                SurfaceStatsCard(
+                    surfaceStats = statistics.surfaceStats.sandStats,
+                    modifier = Modifier.weight(1f)
+                )
             }
+        }
+        
+        // Surface Comparison Details
+        item {
+            ComparisonCard(comparison = statistics.surfaceStats.comparison)
         }
 
         // Period Stats
@@ -411,142 +500,6 @@ private fun ProgressTab(
     }
 }
 
-@Composable
-private fun RecordsTab(
-    statistics: UserStatistics,
-    viewModel: StatisticsViewModel
-) {
-    val uiState by viewModel.uiState.collectAsState()
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Text(
-                text = "Personal Records",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        // Personal Records
-        item {
-            Card {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    val currentStatistics = uiState.userStatistics ?: statistics
-                    val hasAnyRecords = currentStatistics.achievementStats.personalRecords.highestJump != null ||
-                            currentStatistics.achievementStats.personalRecords.highestSpikeReach != null ||
-                            currentStatistics.achievementStats.personalRecords.longestFlightTime != null ||
-                            currentStatistics.achievementStats.personalRecords.mostJumpsInDay != null
-                    
-                    if (hasAnyRecords) {
-                        currentStatistics.achievementStats.personalRecords.highestJump?.let { record ->
-                            PersonalRecordItem(
-                                title = "Highest Jump",
-                                value = "${String.format("%.1f", record.height)}cm",
-                                date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                                icon = Icons.Default.KeyboardArrowUp
-                            )
-                            
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                        
-                        currentStatistics.achievementStats.personalRecords.highestSpikeReach?.let { record ->
-                            PersonalRecordItem(
-                                title = "Highest Spike Reach",
-                                value = "${String.format("%.1f", record.spikeReach)}cm",
-                                date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                                icon = Icons.Default.Star
-                            )
-                            
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                        
-                        currentStatistics.achievementStats.personalRecords.longestFlightTime?.let { record ->
-                            PersonalRecordItem(
-                                title = "Longest Flight Time",
-                                value = "${record.flightTime ?: 0}ms",
-                                date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                                icon = Icons.Default.Phone
-                            )
-                            
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                        
-                        // Removed "Most Jumps in Session" and "Most Jumps in Day" since each session = 1 jump
-                        currentStatistics.achievementStats.personalRecords.mostJumpsInDay?.let { record ->
-                            PersonalRecordItem(
-                                title = "Most Sessions in Day",
-                                value = "${record.jumpCount} sessions",
-                                date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                                icon = Icons.Default.DateRange
-                            )
-                        }
-                    } else {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "No records yet",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "Complete your first jump session to see your personal records!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Streak Information
-        item {
-            Text(
-                text = "Streaks",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Card {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    val currentStatistics = uiState.userStatistics ?: statistics
-                    StreakItem(
-                        title = "Current Streak",
-                        value = "${currentStatistics.achievementStats.streaks.currentStreak} days",
-                        icon = Icons.Default.Favorite
-                    )
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    StreakItem(
-                        title = "Longest Streak",
-                        value = "${currentStatistics.achievementStats.streaks.longestStreak} days",
-                        icon = Icons.Default.Star
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun AchievementsTab(
@@ -619,6 +572,227 @@ private fun AchievementsTab(
 
             items(upcomingMilestones) { milestone ->
                 MilestoneCard(milestone = milestone, isAchieved = false)
+            }
+        }
+    }
+}
+
+// New Helper Composables for Performance Tab
+@Composable
+private fun CombinedPerformanceMatrix(combinedStats: CombinedFilteredStats) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // First row: Hard Floor combinations
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CombinationCard(
+                performance = combinedStats.hardFloorStatic,
+                modifier = Modifier.weight(1f)
+            )
+            CombinationCard(
+                performance = combinedStats.hardFloorDynamic,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        
+        // Second row: Sand combinations
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CombinationCard(
+                performance = combinedStats.sandStatic,
+                modifier = Modifier.weight(1f)
+            )
+            CombinationCard(
+                performance = combinedStats.sandDynamic,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        
+        // Best combination highlight
+        combinedStats.comparisons.bestCombination?.let { best ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Best combination: ${best.surface.icon} ${best.jumpType.icon} (${String.format("%.1f", best.averageHeight)}cm avg)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CombinationCard(
+    performance: PerformanceStats,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                performance.surface == SurfaceType.HARD_FLOOR && performance.jumpType == JumpType.STATIC -> 
+                    MaterialTheme.colorScheme.primaryContainer
+                performance.surface == SurfaceType.HARD_FLOOR && performance.jumpType == JumpType.DYNAMIC -> 
+                    MaterialTheme.colorScheme.secondaryContainer
+                performance.surface == SurfaceType.SAND && performance.jumpType == JumpType.STATIC -> 
+                    MaterialTheme.colorScheme.tertiaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(performance.surface.icon)
+                Text(performance.jumpType.icon)
+            }
+            
+            Text(
+                text = "${performance.surface.displayName}",
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = performance.jumpType.displayName,
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (performance.totalSessions > 0) {
+                Text(
+                    text = "${String.format("%.1f", performance.averageHeight)}cm",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "${performance.totalSessions} sessions",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = "No data",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PersonalRecordsSection(personalRecords: PersonalRecords) {
+    Card {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            val hasAnyRecords = personalRecords.highestJump != null ||
+                    personalRecords.highestSpikeReach != null ||
+                    personalRecords.longestFlightTime != null ||
+                    personalRecords.mostJumpsInDay != null
+            
+            if (hasAnyRecords) {
+                personalRecords.highestJump?.let { record ->
+                    PersonalRecordItem(
+                        title = "Highest Jump",
+                        value = "${String.format("%.1f", record.height)}cm",
+                        date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                        icon = Icons.Default.KeyboardArrowUp
+                    )
+                    
+                    if (personalRecords.highestSpikeReach != null || personalRecords.longestFlightTime != null || personalRecords.mostJumpsInDay != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+                
+                personalRecords.highestSpikeReach?.let { record ->
+                    PersonalRecordItem(
+                        title = "Highest Spike Reach",
+                        value = "${String.format("%.1f", record.spikeReach)}cm",
+                        date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                        icon = Icons.Default.Star
+                    )
+                    
+                    if (personalRecords.longestFlightTime != null || personalRecords.mostJumpsInDay != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+                
+                personalRecords.longestFlightTime?.let { record ->
+                    PersonalRecordItem(
+                        title = "Longest Flight Time",
+                        value = "${record.flightTime ?: 0}ms",
+                        date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                        icon = Icons.Default.Phone
+                    )
+                    
+                    if (personalRecords.mostJumpsInDay != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+                
+                personalRecords.mostJumpsInDay?.let { record ->
+                    PersonalRecordItem(
+                        title = "Most Sessions in Day",
+                        value = "${record.jumpCount} sessions",
+                        date = record.date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                        icon = Icons.Default.DateRange
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "No records yet",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Complete your first jump session to see your personal records!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }

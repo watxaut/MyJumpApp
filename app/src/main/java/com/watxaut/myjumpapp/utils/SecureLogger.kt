@@ -1,26 +1,20 @@
 package com.watxaut.myjumpapp.utils
 
 import android.util.Log
-import com.watxaut.myjumpapp.BuildConfig
 
 object SecureLogger {
     
     fun d(tag: String, message: String) {
-        if (BuildConfig.DEBUG) {
-            Log.d(tag, message)
-        }
+        // Debug logs - always enabled for now
+        Log.d(tag, message)
     }
     
     fun i(tag: String, message: String) {
-        if (BuildConfig.DEBUG) {
-            Log.i(tag, message)
-        }
+        Log.i(tag, message)
     }
     
     fun v(tag: String, message: String) {
-        if (BuildConfig.DEBUG) {
-            Log.v(tag, message)
-        }
+        Log.v(tag, message)
     }
     
     fun w(tag: String, message: String) {
@@ -48,8 +42,6 @@ object SecureLogger {
     }
     
     fun logUserAction(tag: String, action: String) {
-        if (BuildConfig.DEBUG) {
-            Log.d(tag, "User action: $action")
-        }
+        Log.d(tag, "User action: $action")
     }
 }

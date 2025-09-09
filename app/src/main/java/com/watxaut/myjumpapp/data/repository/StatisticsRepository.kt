@@ -5,6 +5,7 @@ import com.watxaut.myjumpapp.data.database.dao.JumpSessionDao
 import com.watxaut.myjumpapp.data.database.dao.UserDao
 import com.watxaut.myjumpapp.domain.statistics.*
 import com.watxaut.myjumpapp.domain.jump.SurfaceType
+import com.watxaut.myjumpapp.domain.jump.JumpType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
@@ -33,7 +34,9 @@ class StatisticsRepository @Inject constructor(
             recentStats = calculateRecentStats(user, jumps, sessions),
             progressStats = calculateProgressStats(jumps, sessions),
             achievementStats = calculateAchievementStats(jumps, sessions),
-            surfaceStats = calculateSurfaceStats(user, sessions)
+            surfaceStats = calculateSurfaceStats(user, sessions),
+            jumpTypeStats = calculateJumpTypeStats(user, sessions),
+            combinedStats = calculateCombinedStats(user, sessions)
         )
     }
 
@@ -48,7 +51,8 @@ class StatisticsRepository @Inject constructor(
             todayStats = calculateDayStatsFromSessions(sessions, today),
             weekStats = calculateWeekStats(jumps, sessions, weekStart),
             quickStats = calculateQuickStats(jumps, sessions),
-            recentSessions = getRecentSessions(sessions, 5)
+            recentSessions = getRecentSessions(sessions, 5),
+            jumpTypeBreakdown = calculateJumpTypeBreakdown(sessions)
         )
     }
 
@@ -66,7 +70,9 @@ class StatisticsRepository @Inject constructor(
                     recentStats = calculateRecentStats(it, jumps, sessions),
                     progressStats = calculateProgressStats(jumps, sessions),
                     achievementStats = calculateAchievementStats(jumps, sessions),
-                    surfaceStats = calculateSurfaceStats(it, sessions)
+                    surfaceStats = calculateSurfaceStats(it, sessions),
+                    jumpTypeStats = calculateJumpTypeStats(it, sessions),
+                    combinedStats = calculateCombinedStats(it, sessions)
                 )
             }
         }
@@ -464,21 +470,79 @@ class StatisticsRepository @Inject constructor(
         val totalJumps = completedSessions.size // Each completed session = 1 jump
         val bestHeight = completedSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0
 
+        // Jump type specific data
+        val staticSessions = completedSessions.filter { it.jumpType == JumpType.STATIC }
+        val dynamicSessions = completedSessions.filter { it.jumpType == JumpType.DYNAMIC }
+        val bestStaticHeight = staticSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0
+        val bestDynamicHeight = dynamicSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0
+
         val milestones = mutableListOf<Milestone>()
 
-        // Height milestones
+        // General height milestones
         val heightTargets = listOf(30.0, 40.0, 50.0, 60.0, 70.0, 80.0)
         heightTargets.forEach { target ->
             milestones.add(
                 Milestone(
                     id = "height_${target.toInt()}",
                     title = "${target.toInt()}cm Jump",
-                    description = "Achieve a jump height of ${target.toInt()}cm",
+                    description = "Achieve a jump height of ${target.toInt()}cm on any surface/type",
                     targetValue = target,
                     currentValue = bestHeight,
                     isAchieved = bestHeight >= target,
                     achievedDate = if (bestHeight >= target) {
                         completedSessions.filter { it.bestJumpHeight >= target }
+                            .minByOrNull { it.startTime }
+                            ?.let { 
+                                LocalDateTime.ofInstant(
+                                    java.time.Instant.ofEpochMilli(it.startTime),
+                                    ZoneId.systemDefault()
+                                )
+                            }
+                    } else null,
+                    category = MilestoneCategory.HEIGHT
+                )
+            )
+        }
+
+        // Static jump height milestones
+        val staticHeightTargets = listOf(25.0, 35.0, 45.0, 55.0, 65.0)
+        staticHeightTargets.forEach { target ->
+            milestones.add(
+                Milestone(
+                    id = "static_height_${target.toInt()}",
+                    title = "⬆️ ${target.toInt()}cm Static Jump",
+                    description = "Achieve ${target.toInt()}cm height with static jump technique",
+                    targetValue = target,
+                    currentValue = bestStaticHeight,
+                    isAchieved = bestStaticHeight >= target,
+                    achievedDate = if (bestStaticHeight >= target) {
+                        staticSessions.filter { it.bestJumpHeight >= target }
+                            .minByOrNull { it.startTime }
+                            ?.let { 
+                                LocalDateTime.ofInstant(
+                                    java.time.Instant.ofEpochMilli(it.startTime),
+                                    ZoneId.systemDefault()
+                                )
+                            }
+                    } else null,
+                    category = MilestoneCategory.HEIGHT
+                )
+            )
+        }
+
+        // Dynamic jump height milestones
+        val dynamicHeightTargets = listOf(30.0, 40.0, 50.0, 60.0, 70.0)
+        dynamicHeightTargets.forEach { target ->
+            milestones.add(
+                Milestone(
+                    id = "dynamic_height_${target.toInt()}",
+                    title = "🏃‍♂️ ${target.toInt()}cm Dynamic Jump",
+                    description = "Achieve ${target.toInt()}cm height with dynamic approach",
+                    targetValue = target,
+                    currentValue = bestDynamicHeight,
+                    isAchieved = bestDynamicHeight >= target,
+                    achievedDate = if (bestDynamicHeight >= target) {
+                        dynamicSessions.filter { it.bestJumpHeight >= target }
                             .minByOrNull { it.startTime }
                             ?.let { 
                                 LocalDateTime.ofInstant(
@@ -505,6 +569,56 @@ class StatisticsRepository @Inject constructor(
                     isAchieved = totalJumps >= target,
                     achievedDate = if (totalJumps >= target) {
                         completedSessions.sortedBy { it.startTime }
+                            .getOrNull(target - 1)
+                            ?.let { 
+                                LocalDateTime.ofInstant(
+                                    java.time.Instant.ofEpochMilli(it.startTime),
+                                    ZoneId.systemDefault()
+                                )
+                            }
+                    } else null,
+                    category = MilestoneCategory.VOLUME
+                )
+            )
+        }
+
+        // Jump type mastery milestones
+        val masteryTargets = listOf(5, 10, 25, 50)
+        masteryTargets.forEach { target ->
+            // Static mastery
+            milestones.add(
+                Milestone(
+                    id = "static_mastery_$target",
+                    title = "⬆️ Static Master ($target)",
+                    description = "Complete $target static jump sessions",
+                    targetValue = target.toDouble(),
+                    currentValue = staticSessions.size.toDouble(),
+                    isAchieved = staticSessions.size >= target,
+                    achievedDate = if (staticSessions.size >= target) {
+                        staticSessions.sortedBy { it.startTime }
+                            .getOrNull(target - 1)
+                            ?.let { 
+                                LocalDateTime.ofInstant(
+                                    java.time.Instant.ofEpochMilli(it.startTime),
+                                    ZoneId.systemDefault()
+                                )
+                            }
+                    } else null,
+                    category = MilestoneCategory.VOLUME
+                )
+            )
+            
+            // Dynamic mastery
+            milestones.add(
+                Milestone(
+                    id = "dynamic_mastery_$target",
+                    title = "🏃‍♂️ Dynamic Master ($target)",
+                    description = "Complete $target dynamic jump sessions",
+                    targetValue = target.toDouble(),
+                    currentValue = dynamicSessions.size.toDouble(),
+                    isAchieved = dynamicSessions.size >= target,
+                    achievedDate = if (dynamicSessions.size >= target) {
+                        dynamicSessions.sortedBy { it.startTime }
                             .getOrNull(target - 1)
                             ?.let { 
                                 LocalDateTime.ofInstant(
@@ -818,6 +932,212 @@ class StatisticsRepository @Inject constructor(
             hardFloorStats = hardFloorStats,
             sandStats = sandStats,
             comparison = comparison
+        )
+    }
+    
+    private fun calculateJumpTypeStats(
+        user: com.watxaut.myjumpapp.data.database.entities.User,
+        sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
+    ): JumpTypeFilteredStats {
+        val staticSessions = sessions.filter { it.jumpType == JumpType.STATIC }
+        val dynamicSessions = sessions.filter { it.jumpType == JumpType.DYNAMIC }
+        
+        val heelToHandReach = user.heelToHandReachCm ?: 0.0
+        val staticAvgHeight = if (staticSessions.isNotEmpty()) {
+            staticSessions.map { it.bestJumpHeight }.average()
+        } else 0.0
+        
+        val staticStats = JumpTypeSpecificStats(
+            jumpType = JumpType.STATIC,
+            totalSessions = staticSessions.size,
+            bestHeight = staticSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            averageHeight = staticAvgHeight,
+            bestSpikeReach = if (heelToHandReach > 0) {
+                (staticSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0) + heelToHandReach
+            } else 0.0,
+            averageSpikeReach = if (heelToHandReach > 0 && staticSessions.isNotEmpty()) {
+                staticAvgHeight + heelToHandReach
+            } else 0.0,
+            last7DaysSessions = 0, // TODO: Calculate from actual sessions
+            last30DaysSessions = 0, // TODO: Calculate from actual sessions
+            firstSessionDate = staticSessions.minByOrNull { it.startTime }?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+            },
+            lastSessionDate = staticSessions.maxByOrNull { it.startTime }?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+            }
+        )
+        
+        val dynamicAvgHeight = if (dynamicSessions.isNotEmpty()) {
+            dynamicSessions.map { it.bestJumpHeight }.average()
+        } else 0.0
+        
+        val dynamicStats = JumpTypeSpecificStats(
+            jumpType = JumpType.DYNAMIC,
+            totalSessions = dynamicSessions.size,
+            bestHeight = dynamicSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            averageHeight = dynamicAvgHeight,
+            bestSpikeReach = if (heelToHandReach > 0) {
+                (dynamicSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0) + heelToHandReach
+            } else 0.0,
+            averageSpikeReach = if (heelToHandReach > 0 && dynamicSessions.isNotEmpty()) {
+                dynamicAvgHeight + heelToHandReach
+            } else 0.0,
+            last7DaysSessions = 0, // TODO: Calculate from actual sessions
+            last30DaysSessions = 0, // TODO: Calculate from actual sessions
+            firstSessionDate = dynamicSessions.minByOrNull { it.startTime }?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+            },
+            lastSessionDate = dynamicSessions.maxByOrNull { it.startTime }?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+            }
+        )
+        
+        val comparison = JumpTypeComparison(
+            heightDifferencePercent = if (staticStats.bestHeight > 0 && dynamicStats.bestHeight > 0) {
+                ((dynamicStats.bestHeight - staticStats.bestHeight) / staticStats.bestHeight) * 100
+            } else 0.0,
+            spikeReachDifferencePercent = if (staticStats.bestSpikeReach > 0 && dynamicStats.bestSpikeReach > 0) {
+                ((dynamicStats.bestSpikeReach - staticStats.bestSpikeReach) / staticStats.bestSpikeReach) * 100
+            } else 0.0,
+            preferredJumpType = when {
+                staticStats.totalSessions > dynamicStats.totalSessions -> JumpType.STATIC
+                dynamicStats.totalSessions > staticStats.totalSessions -> JumpType.DYNAMIC
+                else -> null
+            },
+            sessionRatio = if (dynamicStats.totalSessions > 0) {
+                staticStats.totalSessions.toDouble() / dynamicStats.totalSessions.toDouble()
+            } else if (staticStats.totalSessions > 0) Double.POSITIVE_INFINITY else 0.0
+        )
+        
+        return JumpTypeFilteredStats(
+            staticStats = staticStats,
+            dynamicStats = dynamicStats,
+            comparison = comparison
+        )
+    }
+    
+    private fun calculateCombinedStats(
+        user: com.watxaut.myjumpapp.data.database.entities.User,
+        sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
+    ): CombinedFilteredStats {
+        val heelToHandReach = user.heelToHandReachCm ?: 0.0
+        
+        // Filter sessions by surface and jump type combinations
+        val hardFloorStaticSessions = sessions.filter { 
+            it.surfaceType == SurfaceType.HARD_FLOOR && it.jumpType == JumpType.STATIC 
+        }
+        val hardFloorDynamicSessions = sessions.filter { 
+            it.surfaceType == SurfaceType.HARD_FLOOR && it.jumpType == JumpType.DYNAMIC 
+        }
+        val sandStaticSessions = sessions.filter { 
+            it.surfaceType == SurfaceType.SAND && it.jumpType == JumpType.STATIC 
+        }
+        val sandDynamicSessions = sessions.filter { 
+            it.surfaceType == SurfaceType.SAND && it.jumpType == JumpType.DYNAMIC 
+        }
+        
+        fun calculatePerformanceStats(
+            sessionList: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>,
+            surface: SurfaceType,
+            jumpType: JumpType
+        ): PerformanceStats {
+            val avgHeight = if (sessionList.isNotEmpty()) {
+                sessionList.map { it.bestJumpHeight }.average()
+            } else 0.0
+            
+            return PerformanceStats(
+                surface = surface,
+                jumpType = jumpType,
+                totalSessions = sessionList.size,
+                bestHeight = sessionList.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+                averageHeight = avgHeight,
+                bestSpikeReach = if (heelToHandReach > 0) {
+                    (sessionList.maxOfOrNull { it.bestJumpHeight } ?: 0.0) + heelToHandReach
+                } else 0.0,
+                averageSpikeReach = if (heelToHandReach > 0 && sessionList.isNotEmpty()) {
+                    avgHeight + heelToHandReach
+                } else 0.0,
+                improvementPercent = 0.0, // TODO: Calculate vs previous period
+                consistencyScore = calculateConsistencyScoreFromSessions(sessionList),
+                firstSessionDate = sessionList.minByOrNull { it.startTime }?.let {
+                    LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+                },
+                lastSessionDate = sessionList.maxByOrNull { it.startTime }?.let {
+                    LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.startTime), ZoneId.systemDefault())
+                }
+            )
+        }
+        
+        val hardFloorStatic = calculatePerformanceStats(hardFloorStaticSessions, SurfaceType.HARD_FLOOR, JumpType.STATIC)
+        val hardFloorDynamic = calculatePerformanceStats(hardFloorDynamicSessions, SurfaceType.HARD_FLOOR, JumpType.DYNAMIC)
+        val sandStatic = calculatePerformanceStats(sandStaticSessions, SurfaceType.SAND, JumpType.STATIC)
+        val sandDynamic = calculatePerformanceStats(sandDynamicSessions, SurfaceType.SAND, JumpType.DYNAMIC)
+        
+        // Find best combination
+        val allCombinations = listOf(hardFloorStatic, hardFloorDynamic, sandStatic, sandDynamic)
+            .filter { it.totalSessions > 0 }
+        val bestCombination = allCombinations.maxByOrNull { it.averageHeight }?.let {
+            CombinationResult(
+                surface = it.surface,
+                jumpType = it.jumpType,
+                averageHeight = it.averageHeight,
+                sessionCount = it.totalSessions
+            )
+        }
+        
+        // Calculate effect analyses
+        val surfaceEffectOnJumpTypes = SurfaceEffectAnalysis(
+            staticJumpDifference = if (hardFloorStatic.averageHeight > 0 && sandStatic.averageHeight > 0) {
+                ((hardFloorStatic.averageHeight - sandStatic.averageHeight) / sandStatic.averageHeight) * 100
+            } else 0.0,
+            dynamicJumpDifference = if (hardFloorDynamic.averageHeight > 0 && sandDynamic.averageHeight > 0) {
+                ((hardFloorDynamic.averageHeight - sandDynamic.averageHeight) / sandDynamic.averageHeight) * 100
+            } else 0.0
+        )
+        
+        val jumpTypeEffectOnSurfaces = JumpTypeEffectAnalysis(
+            hardFloorDifference = if (hardFloorStatic.averageHeight > 0 && hardFloorDynamic.averageHeight > 0) {
+                ((hardFloorDynamic.averageHeight - hardFloorStatic.averageHeight) / hardFloorStatic.averageHeight) * 100
+            } else 0.0,
+            sandDifference = if (sandStatic.averageHeight > 0 && sandDynamic.averageHeight > 0) {
+                ((sandDynamic.averageHeight - sandStatic.averageHeight) / sandStatic.averageHeight) * 100
+            } else 0.0
+        )
+        
+        val comparisons = CombinedComparisons(
+            bestCombination = bestCombination,
+            surfaceEffectOnJumpTypes = surfaceEffectOnJumpTypes,
+            jumpTypeEffectOnSurfaces = jumpTypeEffectOnSurfaces
+        )
+        
+        return CombinedFilteredStats(
+            hardFloorStatic = hardFloorStatic,
+            hardFloorDynamic = hardFloorDynamic,
+            sandStatic = sandStatic,
+            sandDynamic = sandDynamic,
+            comparisons = comparisons
+        )
+    }
+    
+    private fun calculateJumpTypeBreakdown(
+        sessions: List<com.watxaut.myjumpapp.data.database.entities.JumpSession>
+    ): JumpTypeBreakdown {
+        val completedSessions = sessions.filter { it.isCompleted }
+        val staticSessions = completedSessions.filter { it.jumpType == JumpType.STATIC }
+        val dynamicSessions = completedSessions.filter { it.jumpType == JumpType.DYNAMIC }
+        
+        return JumpTypeBreakdown(
+            staticCount = staticSessions.size,
+            dynamicCount = dynamicSessions.size,
+            staticBestHeight = staticSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            dynamicBestHeight = dynamicSessions.maxOfOrNull { it.bestJumpHeight } ?: 0.0,
+            staticAverageHeight = if (staticSessions.isNotEmpty()) {
+                staticSessions.map { it.bestJumpHeight }.average()
+            } else 0.0,
+            dynamicAverageHeight = if (dynamicSessions.isNotEmpty()) {
+                dynamicSessions.map { it.bestJumpHeight }.average()
+            } else 0.0
         )
     }
 }
