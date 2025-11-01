@@ -1,158 +1,71 @@
 # MyJumpApp 🏀
 
-An Android application for measuring and tracking vertical jump height using computer vision and pose detection technology.
+An Android application for measuring and tracking vertical jump height using computer vision and pose detection.
+
+[usage.mov](resources/usage.mov)
 
 ## Features
 
-### 🎯 **Accurate Jump Measurement**
-- **Real-time pose detection** using Google ML Kit Vision
-- **Automatic jump detection** with hip position tracking
-- **Precise height calculation** using pixel-to-cm conversion based on user body measurements
-- **Movement stability detection** requiring 2 seconds of stillness before calibration
-- **Advanced false-positive filtering** to prevent camera approach from registering as jumps
-
-### 🏃‍♂️ **Multi-User Support**
-- **Create and manage multiple user profiles**
-- **Individual statistics tracking** for each user
-- **User height configuration** for accurate measurements (eye-to-ankle calibration)
-- **User-specific personal records and achievements**
-
-### 🏐 **Surface Type Tracking**
-- **Hard Floor** tracking (🏀) - for indoor courts, gymnasium floors, concrete
-- **Sand** tracking (🏖️) - for beach volleyball courts and sand surfaces
-- **Separate statistics** for each surface type (jumps are typically lower on sand)
-- **Surface comparison analytics** showing performance differences
-
-### 📊 **Comprehensive Statistics**
-- **Personal bests** and average heights per surface
-- **Recent performance** (last 7 days, last 30 days)
-- **Progress tracking** with trend analysis
-- **Achievement system** with milestone tracking
-- **Session history** with detailed analytics
-- **Streak tracking** (daily and weekly)
-
-### 🎚️ **Advanced Calibration System**
-- **Automatic person detection** with full body visibility requirements
-- **Movement stability detection** - user must remain still for 2 seconds
-- **Real-time calibration progress** with visual feedback
-- **Pixel-to-cm ratio calculation** based on user's actual height
-- **High-confidence pose landmark detection** (>95% confidence threshold)
-
-### 🛡️ **Anti-False-Positive Technology**
-Three-layer filtering system to ensure accurate measurements:
-1. **Depth filtering** - maintains consistent distance from camera
-2. **Baseline depth comparison** - validates user stays at calibration depth
-3. **Average Z-position filtering** - uses running averages to detect approach movements
-
-### 📱 **Modern UI/UX**
-- **Material Design 3** with dynamic color theming
-- **Real-time debug information** for troubleshooting measurements
-- **Comprehensive statistics dashboard** with multiple views
-- **Surface-specific performance comparison**
-- **Visual progress indicators** and achievement tracking
+- **Real-time pose detection** using Google ML Kit Vision with automatic hip tracking
+- **Multi-user profiles** with individual statistics and personal records
+- **Surface type tracking** - Hard Floor (🏀) and Sand (🏖️) with separate analytics
+- **Advanced calibration** - 2-second stability detection with pixel-to-cm conversion
+- **False-positive filtering** - depth tracking prevents camera movement from registering as jumps
+- **Comprehensive statistics** - personal bests, averages, trends, achievements, and streak tracking
+- **Material Design 3** UI with dynamic theming and real-time debug information
 
 ## How It Works
 
-### 1. **User Setup**
-- Create a user profile with name and accurate height measurement
-- Select surface type (Hard Floor or Sand) for your jumping session
-- The app uses your height for precise pixel-to-cm calibration
+1. **Setup**: Create user profile with accurate height and select surface type
+2. **Calibration**: Stand still for 2 seconds with full body visible for automatic calibration
+3. **Jump**: Hip center position tracked in real-time; maximum height recorded per session
+4. **Track**: View statistics, compare surfaces, and monitor progress over time
 
-### 2. **Camera Calibration**
-- Position yourself in camera view with full body visible
-- The app detects your pose using ML Kit Vision API
-- **Stay steady** for 2 seconds while the app calibrates baseline positions
-- Automatic calibration completes when sufficient data is collected
+## Technical Stack
 
-### 3. **Jump Detection**
-- Each session represents one jump attempt
-- The app tracks your hip center position in real-time
-- Maximum height reached during the session is recorded
-- Advanced filtering prevents false readings from camera movement
-
-### 4. **Statistics Tracking**
-- Performance data is automatically saved per surface type
-- View progress over time with detailed analytics
-- Compare performance between different surfaces
-- Track personal records and achievements
-
-## Technical Architecture
-
-### 🏗️ **Built With**
-- **Kotlin** - Primary development language
-- **Jetpack Compose** - Modern Android UI toolkit
-- **ML Kit Vision** - Google's pose detection API
-- **Room Database** - Local data persistence
+- **Kotlin** & **Jetpack Compose** - Modern Android development
+- **ML Kit Vision** - 33-landmark pose detection at 30fps
+- **Room Database** - Local persistence with surface-aware tracking
 - **Hilt** - Dependency injection
-- **Coroutines & Flow** - Asynchronous programming
 - **CameraX** - Camera integration
+- **Coroutines & Flow** - Asynchronous operations
 
-### 📐 **Measurement Technology**
-- **Computer Vision**: Uses 33 body landmarks for pose detection
-- **Geometric Calibration**: Eye-to-ankle measurement represents 85% of body height
-- **Real-time Processing**: 30fps pose detection and analysis
-- **Sub-pixel Accuracy**: Smoothing algorithms for precise measurements
-
-### 🔧 **Key Components**
-- **JumpDetector**: Core measurement and calibration logic
-- **StatisticsRepository**: Performance data calculation and aggregation  
-- **Surface-aware Database**: Separate tracking for different jump surfaces
-- **WakeLock Manager**: Keeps screen active during sessions
-
-## Debug Information
-
-The app provides comprehensive debug information for troubleshooting measurements:
-
-- **Hip Y (Current/Baseline)**: Current and calibrated hip positions in pixels
-- **Hip Movement**: Pixel difference from baseline position  
-- **Body Height**: Total body height measurement in pixels
-- **Pixel Ratio**: Conversion factor from pixels to centimeters
-- **Confidence Score**: ML Kit pose detection confidence
-- **Landmark Count**: Number of detected body landmarks
-- **Depth Information**: Z-coordinate tracking for false-positive filtering
+### Measurement Technology
+- Eye-to-ankle calibration (85% of body height)
+- Sub-pixel accuracy with smoothing algorithms
+- >95% confidence threshold for pose landmarks
+- Three-layer depth filtering system
 
 ## Usage Tips
 
-### 📏 **For Best Results**
-1. **Accurate height measurement** is crucial - measure from head to floor
-2. **Good lighting** improves pose detection accuracy
-3. **Stable phone position** - mount or place phone securely
-4. **Clear background** helps with person detection
-5. **Stay within frame** - ensure full body is visible during calibration
+**For Best Results:**
+- Measure height accurately (head to floor)
+- Use good lighting and stable phone position
+- Keep full body in frame during calibration
+- Allow proper calibration before jumping
 
-### 🏃‍♂️ **Jump Technique**
-- Each session counts as one jump attempt
-- Focus on maximum vertical height rather than multiple jumps
-- Allow proper calibration before attempting your jump
-- Surface type affects results - sand jumps are typically 15-20% lower
-
-### 📊 **Interpreting Statistics**
-- **Personal Best**: Your highest recorded jump on each surface
-- **Average Height**: Mean performance over selected time periods
-- **Consistency Score**: How consistent your performances are (lower deviation = higher score)
-- **Surface Comparison**: Performance difference between hard floor and sand
+**Note:** Sand jumps are typically 15-20% lower than hard floor jumps.
 
 ## Installation
 
-1. Clone the repository
-2. Open in Android Studio
-3. Sync Gradle dependencies
-4. Run on Android device with camera
+```bash
+git clone <repository-url>
+# Open in Android Studio, sync Gradle, and run
+```
 
 ## Requirements
 
-- **Android 13.0 (API 33)** or higher
-- **Camera permission** for pose detection
-- **Storage permission** for data persistence
-- **Rear-facing camera** recommended for best results
+- Android 13.0 (API 33) or higher
+- Camera and storage permissions
+- Rear-facing camera recommended
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+Contributions welcome! Submit pull requests or open issues for bugs and feature requests.
 
 ## License
 
-This project is licensed under the MIT License.
+MIT License
 
 ---
 
