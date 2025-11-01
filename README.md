@@ -2,7 +2,9 @@
 
 An Android application for measuring and tracking vertical jump height using computer vision and pose detection.
 
-[usage.mov](resources/usage.mov)
+
+https://github.com/user-attachments/assets/4ab743d7-71be-467b-8a69-d02ab6d68815
+
 
 ## Features
 
